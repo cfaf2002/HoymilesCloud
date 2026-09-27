@@ -257,6 +257,24 @@ class HoymilesClient
         return [];
     }
 
+    /** Wie call(), liefert "data" aber unverändert (auch Text oder Zahl). */
+    public function callValue(string $path, array $payload)
+    {
+        for ($try = 0; $try < 2; $try++) {
+            $http = 0;
+            $resp = $this->httpJson(self::BASE_NE . $path, $payload, $this->authHeaders(), $http);
+            if ((string) ($resp['status'] ?? '') === '0') {
+                return $resp['data'] ?? null;
+            }
+            if ($try === 0 && self::looksLikeAuthError($http, $resp)) {
+                $this->state['token'] = '';
+                continue;
+            }
+            throw new HoymilesException("$path: " . ($resp['status'] ?? '?') . ' ' . ($resp['message'] ?? ''));
+        }
+        return null;
+    }
+
     /** Wie call(), für Endpunkte, deren "data" eine Liste ist. */
     public function callList(string $path, array $payload): array
     {
@@ -390,6 +408,32 @@ class HoymilesClient
     {
         $path = $this->state['mode'] === 'home_v3' ? '/pvmc/api/0/station/upgrade_compare_c' : '/pvm/api/0/upgrade/compare';
         return $this->call($path, ['sid' => $sid, 'dtu_sn' => $dtuSn]);
+    }
+
+    /**
+     * Steuerbefehl an Wechselrichter oder DTU senden (wie in der S-Miles-Weboberfläche).
+     * Liefert die Auftragsnummer; das Ergebnis wird mit commandStatus() abgefragt.
+     */
+    public function sendCommand(int $action, string $devSn, int $devType, string $dtuSn): string
+    {
+        $data = $this->callValue('/pvm-ctl/api/0/dev/command/put', [
+            'action'   => $action,
+            'dev_sn'   => $devSn,
+            'dev_type' => $devType,
+            'dtu_sn'   => $dtuSn,
+            'data'     => new stdClass(),
+        ]);
+        if (!is_scalar($data) || (string) $data === '') {
+            throw new HoymilesException('Befehl wurde von der Cloud nicht angenommen');
+        }
+        return (string) $data;
+    }
+
+    /** Stand eines Steuerbefehls: 2 = läuft noch, 0 = erfolgreich, sonst Fehlercode. */
+    public function commandStatus(string $taskId): int
+    {
+        $data = $this->call('/pvm-ctl/api/0/dev/command/put_status', ['id' => $taskId]);
+        return (int) ($data['code'] ?? -1);
     }
 
     // --------------------------------------------------- Protobuf / Auswertung
