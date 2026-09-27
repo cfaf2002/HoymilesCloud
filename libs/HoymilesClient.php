@@ -34,6 +34,9 @@ class HoymilesClient
 
     private const TOKEN_LIFETIME = 6900; // Token gilt laut Cloud ca. 7200 s
 
+    /** Nur für automatisierte Tests: ersetzt https://…hoymiles.com durch einen lokalen Testserver. */
+    public static $baseUrlOverride = null;
+
     private $user;
     private $password;
     private $authMode;
@@ -75,8 +78,10 @@ class HoymilesClient
         if ($this->user === '' || $this->password === '') {
             throw new HoymilesAuthException('Benutzername oder Passwort fehlt');
         }
+        // "auto" probiert nur die sicheren v3-Varianten (Argon2id bzw. SHA-256 mit Einmal-Code).
+        // Legacy (unsalzenes MD5) wird nur verwendet, wenn es ausdrücklich gewählt ist.
         $modes = $this->authMode === 'auto'
-            ? ['web_v3', 'installer_v3', 'home_v3', 'legacy_v0']
+            ? ['web_v3', 'installer_v3', 'home_v3']
             : [$this->authMode];
         if ($this->authMode === 'auto' && in_array($this->state['mode'], $modes, true)) {
             // zuletzt erfolgreiche Variante zuerst probieren
@@ -252,6 +257,12 @@ class HoymilesClient
         return [];
     }
 
+    /** Wie call(), für Endpunkte, deren "data" eine Liste ist. */
+    public function callList(string $path, array $payload): array
+    {
+        return array_values($this->call($path, $payload));
+    }
+
     /** Wie call(), aber mit binärer (Protobuf-)Antwort. */
     public function callRaw(string $path, array $payload): string
     {
@@ -310,22 +321,75 @@ class HoymilesClient
     }
 
     /**
-     * Aktueller Wert je PV-Eingang aus dem Tagesverlauf (5-Minuten-Raster).
-     * @return array<int,array> port => ['MODULE_POWER'=>W,'MODULE_V'=>V,'MODULE_I'=>A,'slot'=>'HH:MM']
+     * Tagesverlauf (5-Minuten-Raster) je PV-Eingang eines Wechselrichters.
+     * Versucht zuerst eine gemeinsame Anfrage für alle Eingänge; liefert die Cloud
+     * nicht für jeden Eingang eine eigene Kurve, wird je Eingang einzeln gefragt.
+     * @return array<int,array> port => ['x_axis'=>[...], 'series'=>[...]]
      */
-    public function getModuleValues(int $sid, int $microId, array $ports, int $maxAgeMinutes): array
+    public function getModuleCharts(int $sid, int $microId, array $ports, string $date = ''): array
     {
-        $result = [];
-        foreach ($ports as $port) {
+        $date = $date ?: date('Y-m-d');
+        $ports = array_values(array_unique(array_map('intval', $ports)));
+        $request = function (array $p) use ($sid, $microId, $date): array {
             $raw = $this->callRaw('/pvm-data/api/0/module/data/count_by_day', [
                 'sid'     => $sid,
-                'date'    => date('Y-m-d'),
-                'mi_list' => [['id' => $microId, 'port' => (int) $port]],
+                'date'    => $date,
+                'mi_list' => array_map(static function (int $port) use ($microId): array {
+                    return ['id' => $microId, 'port' => $port];
+                }, $p),
                 'quota'   => ['MODULE_POWER', 'MODULE_V', 'MODULE_I'],
             ]);
-            $result[(int) $port] = self::latestModuleValues(self::decodeLineChart($raw), $maxAgeMinutes);
+            return self::decodeLineChart($raw);
+        };
+
+        if (count($ports) > 1) {
+            $chart = $request($ports);
+            $byPort = [];
+            foreach ($chart['series'] as $series) {
+                if ($series['port'] !== null) {
+                    $byPort[(int) $series['port']][] = $series;
+                }
+            }
+            $complete = true;
+            foreach ($ports as $port) {
+                $types = array_column($byPort[$port] ?? [], 'type');
+                if (!in_array('MODULE_POWER', $types, true)) {
+                    $complete = false;
+                }
+            }
+            if ($complete) {
+                $result = [];
+                foreach ($ports as $port) {
+                    $result[$port] = ['x_axis' => $chart['x_axis'], 'series' => $byPort[$port]];
+                }
+                return $result;
+            }
+            $this->log('Tagesverlauf', 'gemeinsame Anfrage unvollständig – frage Eingänge einzeln ab');
+        }
+
+        $result = [];
+        foreach ($ports as $port) {
+            $result[$port] = $request([$port]);
         }
         return $result;
+    }
+
+    /** Geräte-Baum der Anlage (DTU mit Wechselrichtern, inkl. Firmware-Ständen). */
+    public function getDeviceTree(int $sid): array
+    {
+        if ($this->state['mode'] === 'home_v3') {
+            $data = $this->callList('/pvmc/api/0/station/select_device_c', ['sid' => $sid]);
+        } else {
+            $data = $this->callList('/pvm/api/0/station/select_device_of_tree', ['id' => $sid]);
+        }
+        return $data;
+    }
+
+    /** Firmware-Vergleich für eine DTU: ['upgrade' => 0|1, 'list' => [...]] */
+    public function getFirmwareStatus(int $sid, string $dtuSn): array
+    {
+        $path = $this->state['mode'] === 'home_v3' ? '/pvmc/api/0/station/upgrade_compare_c' : '/pvm/api/0/upgrade/compare';
+        return $this->call($path, ['sid' => $sid, 'dtu_sn' => $dtuSn]);
     }
 
     // --------------------------------------------------- Protobuf / Auswertung
@@ -380,6 +444,75 @@ class HoymilesClient
             $out[$type] = $fresh ? round((float) end($s['data']), $digits[$type]) : 0.0;
         }
         return $out;
+    }
+
+    /** Energie eines Tagesverlaufs in Wh (Summe der Leistungswerte × Rasterlänge). */
+    public static function chartEnergyWh(array $chart): float
+    {
+        foreach ($chart['series'] as $s) {
+            if ($s['type'] === 'MODULE_POWER' && $s['data']) {
+                $minutes = self::slotMinutes($chart['x_axis']);
+                $sum = 0.0;
+                foreach ($s['data'] as $w) {
+                    if (is_finite((float) $w) && $w > 0) {
+                        $sum += (float) $w;
+                    }
+                }
+                return $sum * $minutes / 60;
+            }
+        }
+        return 0.0;
+    }
+
+    /**
+     * Leistungswerte eines Tagesverlaufs mit Zeitstempel (für das Archiv).
+     * @return array<int,array{TimeStamp:int,Value:float}>
+     */
+    public static function chartPowerSamples(array $chart, string $date): array
+    {
+        $out = [];
+        foreach ($chart['series'] as $s) {
+            if ($s['type'] !== 'MODULE_POWER') {
+                continue;
+            }
+            foreach ($s['data'] as $idx => $w) {
+                $label = $chart['x_axis'][$idx] ?? null;
+                if (!$label || !preg_match('/^(\d{1,2}):(\d{2})$/', $label) || !is_finite((float) $w)) {
+                    continue;
+                }
+                $ts = strtotime("$date $label:00");
+                if ($ts !== false) {
+                    $out[] = ['TimeStamp' => $ts, 'Value' => round(max(0.0, (float) $w), 1)];
+                }
+            }
+            break;
+        }
+        return $out;
+    }
+
+    /** Rasterlänge des Verlaufs in Minuten (aus den Uhrzeit-Beschriftungen, Standard 5). */
+    private static function slotMinutes(array $xAxis): float
+    {
+        $times = [];
+        foreach ($xAxis as $label) {
+            if (is_string($label) && preg_match('/^(\d{1,2}):(\d{2})$/', $label, $m)) {
+                $times[] = (int) $m[1] * 60 + (int) $m[2];
+            }
+        }
+        if (count($times) < 2) {
+            return 5.0;
+        }
+        $diffs = [];
+        for ($i = 1, $n = count($times); $i < $n; $i++) {
+            if ($times[$i] > $times[$i - 1]) {
+                $diffs[] = $times[$i] - $times[$i - 1];
+            }
+        }
+        if (!$diffs) {
+            return 5.0;
+        }
+        sort($diffs);
+        return (float) $diffs[intdiv(count($diffs), 2)]; // Median
     }
 
     /** Liste [{key, val}] in key => val umwandeln. */
@@ -470,6 +603,9 @@ class HoymilesClient
 
     private function http(string $url, array $payload, array $headers, int &$http = 0): string
     {
+        if (self::$baseUrlOverride !== null) {
+            $url = (string) preg_replace('#^https://[a-z]+\.hoymiles\.com#', self::$baseUrlOverride, $url);
+        }
         $json = (string) json_encode($payload, JSON_UNESCAPED_SLASHES);
         $isAuth = strpos($url, '/auth/') !== false;
         $this->log('Request', "POST $url " . ($isAuth ? '[Login-Daten ausgeblendet]' : $json));
