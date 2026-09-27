@@ -358,7 +358,9 @@
         return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
     }
 
+    let hmRefreshAt = 0;
     function hmRefresh() {
+        hmRefreshAt = Date.now() / 1000;
         document.getElementById('refresh').classList.add('spin');
         requestAction('Refresh', true);
         setTimeout(() => document.getElementById('refresh').classList.remove('spin'), 8000);
@@ -387,7 +389,9 @@
         hmState = s;
         document.getElementById('hm').dataset.status = s.status;
         const L = s.labels;
-        document.getElementById('refresh').classList.remove('spin');
+        if (!s.lastUpdate || s.lastUpdate >= hmRefreshAt - 2) {
+            document.getElementById('refresh').classList.remove('spin'); // nicht bei einer reinen Synchronisation
+        }
         document.getElementById('refresh').title = L.refresh;
 
         const ready = !!s.configured;
@@ -458,7 +462,7 @@
         document.getElementById('fMonth').append(L.month + ' ', Object.assign(document.createElement('b'), { textContent: hmKWh(s.month) }));
         document.getElementById('fYear').innerHTML = '';
         document.getElementById('fYear').append(L.year + ' ', Object.assign(document.createElement('b'), { textContent: hmKWh(s.year) }));
-        hmSet('fTotal', L.dataTime + ' ' + hmAgo(s.dataTime, L));
+        hmFooterTime();
 
         hmDrawCurve();
     }
@@ -526,6 +530,35 @@
         svg.onpointermove = move; svg.onpointerdown = move; svg.onpointerleave = leave; svg.ontouchend = leave;
     }
 
+    function hmTime(ts) {
+        return ts ? new Date(ts * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '–';
+    }
+    function hmFooterTime() {
+        if (!hmState || !hmState.configured) { return; }
+        const s = hmState, L = s.labels, el = document.getElementById('fTotal');
+        el.textContent = L.dataTime + ' ' + hmAgo(s.dataTime, L);
+        el.title = L.cloudTime + ' ' + hmTime(s.dataTime) + '\n' + L.lastQuery + ': ' + hmTime(s.lastUpdate)
+            + (s.nextUpdate ? '\n' + L.nextQuery + ': ' + hmTime(s.nextUpdate) : '');
+    }
+
+    // Kachel wieder sichtbar (App aus dem Hintergrund, Seite gewechselt, Kachel geöffnet):
+    // aktuellen Stand beim Modul anfordern. Nachrichten, die in der Zwischenzeit verloren
+    // gingen, werden so nachgeholt. Das fragt nicht die Cloud ab, sondern nur das Modul.
+    let hmSyncAt = 0;
+    function hmSync() {
+        if (document.visibilityState === 'hidden' || Date.now() - hmSyncAt < 15000) { return; }
+        hmSyncAt = Date.now();
+        try { requestAction('Sync', true); } catch (e) { /* ältere Visualisierung */ }
+    }
+    document.addEventListener('visibilitychange', hmSync);
+    window.addEventListener('focus', hmSync);
+    window.addEventListener('pageshow', hmSync);
+    setTimeout(hmSync, 500);
+
     window.addEventListener('resize', hmDrawCurve);
-    setInterval(() => { if (hmState && hmState.configured) { hmSet('fTotal', hmState.labels.dataTime + ' ' + hmAgo(hmState.dataTime, hmState.labels)); } }, 30000);
+    setInterval(() => {
+        hmFooterTime();
+        // Seit dem geplanten Abruf ist über eine Minute nichts gekommen? Dann nachfragen.
+        if (hmState && hmState.nextUpdate && Date.now() / 1000 > hmState.nextUpdate + 60) { hmSync(); }
+    }, 30000);
 </script>

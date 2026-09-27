@@ -170,7 +170,9 @@
             "The threshold uses the unit of the sensor (e.g. lux). With learning switched on, the module notes each morning how bright it was when the inverter started producing (from the archive of the sensor, if it is logged) and uses 80 % of the typical value of the last days.": "Die Schwelle hat die Einheit des Sensors (z. B. Lux). Mit „automatisch lernen“ merkt sich das Modul jeden Morgen, wie hell es war, als der Wechselrichter zu produzieren begann (aus dem Archiv des Sensors, falls er archiviert wird), und nimmt 80 % des typischen Werts der letzten Tage.",
             "Learning is switched off – the threshold entered above applies.": "Lernen ist ausgeschaltet – es gilt die oben eingetragene Schwelle.",
             "Nothing learned yet – the threshold entered above applies until the first morning with a brightness sensor.": "Noch nichts gelernt – bis zum ersten Morgen mit Helligkeitssensor gilt die oben eingetragene Schwelle.",
-            "Learned threshold: %s (80 %% of the brightness at production start, last days: %s)": "Gelernte Schwelle: %s (80 %% der Helligkeit beim Produktionsstart, letzte Tage: %s)"
+            "Learned threshold: %s (80 %% of the brightness at production start, last days: %s)": "Gelernte Schwelle: %s (80 %% der Helligkeit beim Produktionsstart, letzte Tage: %s)",
+            "next query": "nächster Abruf",
+            "Cloud data from": "Cloud-Daten von"
         }
     }
 }

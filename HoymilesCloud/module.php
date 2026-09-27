@@ -96,6 +96,7 @@ class HoymilesCloud extends IPSModule
         $this->RegisterAttributeString('Micros', '[]');
         $this->RegisterAttributeString('Channels', '[]');
         $this->RegisterAttributeInteger('BrightnessRegistered', 0);
+        $this->RegisterAttributeInteger('NextUpdate', 0);
         $this->RegisterAttributeInteger('EnergyCalcAt', 0);
         $this->RegisterAttributeString('EnergyDate', '');
         $this->RegisterAttributeBoolean('WasFresh', false);
@@ -329,6 +330,9 @@ class HoymilesCloud extends IPSModule
         switch ($Ident) {
             case 'Refresh':
                 $this->Update();
+                break;
+            case 'Sync': // Kachel wieder sichtbar: aktuellen Stand senden, ohne die Cloud abzufragen
+                $this->pushTile();
                 break;
             default:
                 throw new Exception('Invalid Ident');
@@ -1157,6 +1161,7 @@ class HoymilesCloud extends IPSModule
             }
         }
         $this->SetTimerInterval('UpdateTimer', $interval * 1000);
+        $this->WriteAttributeInteger('NextUpdate', time() + $interval);
 
         if ((bool) $this->GetValue('NightActive') !== $night) {
             $this->SendDebug('Night mode', ($night ? 'active' : 'ended') . ($source !== '' ? " (detected via $source)" : ''), 0);
@@ -1448,6 +1453,8 @@ class HoymilesCloud extends IPSModule
             'total'        => (float) $value('EnergyTotal'),
             'savingsToday' => $this->ReadPropertyBoolean('Savings') ? (float) $value('SavingsToday') : null,
             'dataTime'     => $dataTs,
+            'lastUpdate'   => (int) $value('LastUpdate'),
+            'nextUpdate'   => $this->ReadPropertyBoolean('Active') ? $this->ReadAttributeInteger('NextUpdate') : 0,
             'inputs'       => $inputs,
             'curve'        => $curve,
             'labels'       => [
@@ -1456,6 +1463,9 @@ class HoymilesCloud extends IPSModule
                 'month'         => $this->Translate('Month'),
                 'year'          => $this->Translate('Year'),
                 'dataTime'      => $this->Translate('Data'),
+                'lastQuery'     => $this->Translate('Last query'),
+                'nextQuery'     => $this->Translate('next query'),
+                'cloudTime'     => $this->Translate('Cloud data from'),
                 'justNow'       => $this->Translate('just now'),
                 'minAgo'        => $this->Translate('%d min ago'),
                 'ofRated'       => $this->Translate('%s % of %p W'),
