@@ -21,16 +21,17 @@ Version 1.0 · ab IP-Symcon 7.0 · Oberfläche Deutsch und Englisch · Lizenz MI
 9. [Ersparnis in Euro](#9-ersparnis-in-euro)
 10. [Firmware](#10-firmware)
 11. [Wechselrichter steuern](#11-wechselrichter-steuern)
-12. [Verlauf nachladen](#12-verlauf-nachladen)
-13. [Archivierung](#13-archivierung)
-14. [Status der Instanz](#14-status-der-instanz)
-15. [Befehle für eigene Skripte](#15-befehle-für-eigene-skripte)
-16. [Datensicherheit](#16-datensicherheit)
-17. [Fehlerbehebung](#17-fehlerbehebung)
-18. [Grenzen des Moduls](#18-grenzen-des-moduls)
-19. [Für Entwickler: Sprachen, Tests, GitHub](#19-für-entwickler-sprachen-tests-github)
-20. [Versionshistorie](#20-versionshistorie)
-21. [Lizenz und Dank](#21-lizenz-und-dank)
+12. [Kachel für die Visualisierung](#12-kachel-für-die-visualisierung)
+13. [Verlauf nachladen](#13-verlauf-nachladen)
+14. [Archivierung](#14-archivierung)
+15. [Status der Instanz](#15-status-der-instanz)
+16. [Befehle für eigene Skripte](#16-befehle-für-eigene-skripte)
+17. [Datensicherheit](#17-datensicherheit)
+18. [Fehlerbehebung](#18-fehlerbehebung)
+19. [Grenzen des Moduls](#19-grenzen-des-moduls)
+20. [Für Entwickler: Sprachen, Tests, GitHub](#20-für-entwickler-sprachen-tests-github)
+21. [Versionshistorie](#21-versionshistorie)
+22. [Lizenz und Dank](#22-lizenz-und-dank)
 
 ---
 
@@ -44,6 +45,7 @@ Version 1.0 · ab IP-Symcon 7.0 · Oberfläche Deutsch und Englisch · Lizenz MI
 - **Ersparnis in Euro** für heute, Monat, Jahr und gesamt.
 - **Firmware-Stände** von DTU und Wechselrichter und Hinweis, wenn ein Update verfügbar ist.
 - **Verlauf nachladen:** vergangene Tage aus der Cloud ins Symcon-Archiv holen, damit Diagramme nicht erst mit dem Installationstag beginnen.
+- **Eigene Kachel** für die Kachel-Visualisierung mit Leistung, Tagesverlauf, PV-Eingängen und Störungen – in jeder Kachelgröße, hell und dunkel.
 - **Nachtmodus:** Nachts wird nur selten und mit einer einzigen Anfrage abgefragt. Morgens geht es pünktlich wieder los – ausgelöst durch einen **Helligkeitssensor**, den Sonnenaufgang oder die ersten frischen Daten.
 - **Archivierung auf Wunsch:** Leistung und Gesamtertrag werden automatisch aufgezeichnet, der Gesamtertrag als Zähler.
 - **Aktivierungsschalter**, um die Abfrage vorübergehend abzuschalten, ohne etwas zu löschen.
@@ -67,7 +69,7 @@ Es gibt zwei Wege. Beide führen zum selben Ergebnis.
 
 ### Variante A: über ein eigenes Git-Repository (empfohlen)
 
-Vorteil: Updates lassen sich später mit einem Klick einspielen, und die automatischen Tests laufen bei jeder Änderung (siehe [Abschnitt 19](#19-für-entwickler-sprachen-tests-github)).
+Vorteil: Updates lassen sich später mit einem Klick einspielen, und die automatischen Tests laufen bei jeder Änderung (siehe [Abschnitt 20](#20-für-entwickler-sprachen-tests-github)).
 
 1. Den Inhalt dieses Ordners in ein eigenes GitHub-Repository hochladen (ein privates Repository reicht).
 2. In der Symcon-Konsole **Kerninstanzen → Modules** öffnen.
@@ -102,7 +104,7 @@ Einstellungen, Variablen und Archivdaten bleiben bei einem Update erhalten. Neue
    ```
 
 4. **Fertig:** Wenige Sekunden später liest das Modul Anlage und Wechselrichter ein, legt alle Variablen an und holt die ersten Werte. Im Formularbereich unten stehen danach Anlage, Modell, Seriennummer und Anzahl der PV-Eingänge.
-5. **Optional:** Helligkeitssensor und Push-Nachrichten einrichten ([Nachtmodus](#nachtmodus), [Störungswarnungen](#8-störungswarnungen)), Strompreis prüfen ([Ersparnis](#9-ersparnis-in-euro)) und den [Verlauf nachladen](#12-verlauf-nachladen).
+5. **Optional:** Helligkeitssensor und Push-Nachrichten einrichten ([Nachtmodus](#nachtmodus), [Störungswarnungen](#8-störungswarnungen)), Strompreis prüfen ([Ersparnis](#9-ersparnis-in-euro)) und den [Verlauf nachladen](#13-verlauf-nachladen).
 
 Gibt es mehrere Anlagen im Konto, kann nach dem Verbindungstest im Feld **Anlage** die gewünschte Anlage ausgewählt werden. Ansonsten nimmt das Modul automatisch die erste.
 
@@ -117,7 +119,7 @@ Gibt es mehrere Anlagen im Konto, kann nach dem Verbindungstest im Feld **Anlage
 | **Passwort** | – | Passwort der S-Miles Cloud bzw. App. |
 | **Anlage** | automatisch | Welche Anlage des Kontos ausgelesen wird. „automatisch“ nimmt die erste. Die Liste füllt sich nach „Verbindung testen“. |
 | **Abfrageintervall** | 5 Minuten | Wie oft das Modul die Cloud abfragt (1–60 Minuten). Siehe Hinweis unten. |
-| **Archivieren** | an | Schaltet die Aufzeichnung von Leistung und Gesamtertrag im Archiv ein (siehe [Archivierung](#13-archivierung)). |
+| **Archivieren** | an | Schaltet die Aufzeichnung von Leistung und Gesamtertrag im Archiv ein (siehe [Archivierung](#14-archivierung)). |
 
 > **Hinweis zum Abfrageintervall:** Die Hoymiles-Cloud berechnet nur etwa alle 5 Minuten neue Werte. Ein kürzeres Intervall ist möglich, bringt aber keine aktuelleren Daten – das Modul holt dann einfach mehrmals denselben Stand ab. 5 Minuten sind deshalb die sinnvolle Einstellung.
 
@@ -183,9 +185,10 @@ Bleibt nur **ein** Solarmodul-Eingang übrig, gibt es nichts zu vergleichen – 
 | Feld | Standard | Bedeutung |
 |------|----------|-----------|
 | **Login-Variante** | automatisch | Welche Anmeldeart verwendet wird. „automatisch“ probiert die drei sicheren Varianten (Web, Installer-App, Home-App) nacheinander. Nur ändern, wenn die automatische Erkennung nicht klappt. |
+| **Nennleistung für den Ring in der Kachel** | 0 | 0 = aus dem Modellnamen des Wechselrichters. Z. B. 800 W eintragen, wenn der Wechselrichter auf 800 W begrenzt ist. |
 | **Werte älter als … als 0 W werten** | 20 Minuten | Sind die Daten der Cloud älter als diese Zeit (z. B. nachts, wenn der Wechselrichter schläft), werden Leistung, Spannung und Strom auf 0 gesetzt. |
 
-Die Variante **Legacy (v0)** ist absichtlich nicht Teil der automatischen Erkennung, weil sie das Passwort nur schwach geschützt überträgt. Sie sollte nur gewählt werden, wenn keine andere Variante funktioniert (siehe [Datensicherheit](#16-datensicherheit)).
+Die Variante **Legacy (v0)** ist absichtlich nicht Teil der automatischen Erkennung, weil sie das Passwort nur schwach geschützt überträgt. Sie sollte nur gewählt werden, wenn keine andere Variante funktioniert (siehe [Datensicherheit](#17-datensicherheit)).
 
 ### Schaltflächen
 
@@ -195,7 +198,7 @@ Die Variante **Legacy (v0)** ist absichtlich nicht Teil der automatischen Erkenn
 | **Anlage neu einlesen** | Liest Anlage, Wechselrichter und PV-Eingänge erneut aus der Cloud und prüft beim nächsten Abruf die Firmware neu. Nötig, wenn ein Wechselrichter getauscht oder ergänzt wurde. |
 | **Jetzt aktualisieren** | Holt sofort die aktuellen Werte, ohne auf den nächsten Zeitpunkt zu warten. |
 | **Wechselrichter neu starten / aus / ein**, **DTU neu starten** | Im Bereich „Wechselrichter steuern“ – siehe [Abschnitt 11](#11-wechselrichter-steuern). |
-| **Verlauf nachladen** / **Abbrechen** | Im Bereich „Verlauf nachladen“ – siehe [Abschnitt 12](#12-verlauf-nachladen). |
+| **Verlauf nachladen** / **Abbrechen** | Im Bereich „Verlauf nachladen“ – siehe [Abschnitt 13](#13-verlauf-nachladen). |
 
 ## 6. Die Variablen
 
@@ -399,7 +402,27 @@ HOYM_SendCommand(12345, 'dtu_reboot', '');    // DTU neu starten
 
 Hinweis: Bei Konten der „S-Miles Home“-App kann die Cloud Steuerbefehle ablehnen. Das Formular zeigt dann den Grund an.
 
-## 12. Verlauf nachladen
+## 12. Kachel für die Visualisierung
+
+Das Modul bringt eine eigene Kachel für die **Kachel-Visualisierung** von Symcon mit (ab Symcon 7.1). Sie erscheint automatisch, sobald die Hoymiles-Instanz in die Visualisierung gezogen wird – es muss nichts eingerichtet werden.
+
+**Was die Kachel zeigt:**
+
+- **Kopfzeile:** Name der Anlage und Modell, dazu der Zustand als Symbol mit Text: *Produziert* (Sonne), *Nacht* (Mond), *Standby*, *Ausgeschaltet* oder *Störung* (rot). Rechts eine Schaltfläche zum sofortigen Aktualisieren.
+- **Störung:** Liegt eine Störung vor, steht die Meldung als rote Zeile direkt unter der Kopfzeile.
+- **Aktuelle Leistung** groß in der Mitte, daneben ein Ring, der den Anteil an der Nennleistung zeigt (z. B. „45 % von 1.800 W“). Solange die Anlage produziert, leuchtet die Sonne im Ring.
+- **Ertrag heute** und **heute gespart** (wenn die Ersparnis eingeschaltet ist).
+- **Tagesverlauf** der Leistung als Fläche. Mit dem Finger oder der Maus lässt sich jeder Zeitpunkt antippen, dann erscheinen Uhrzeit und Leistung.
+- **Die PV-Eingänge** als Balken mit Leistung und Tagesertrag. Speicher-Eingänge sind blau und mit Batterie-Symbol gekennzeichnet, ein auffällig schwacher Eingang wird rot hervorgehoben, freie Eingänge werden nicht angezeigt. Fährt man mit der Maus darüber, erscheinen zusätzlich Spannung und Strom.
+- **Fußzeile:** Ertrag des Monats und des Jahres sowie das Alter der Daten („Daten vor 3 Min.“).
+
+**Die Kachel passt sich der Größe an:** Eine kleine Kachel zeigt nur Leistung und Ertrag heute, eine breite zusätzlich den Ring und die Ersparnis, eine große Kachel alles inklusive Tagesverlauf und PV-Eingängen. Farben und Schrift übernimmt sie von der Visualisierung – sie funktioniert in heller und dunkler Darstellung.
+
+**Einstellung:** Die Nennleistung für den Ring nimmt das Modul aus dem Modellnamen (HMS-1800-4T → 1.800 W). Bei einem auf 800 W begrenzten Balkonkraftwerk bietet es sich an, unter **Erweitert → Nennleistung für den Ring** 800 W einzutragen – dann ist der Ring bei voller Einspeisung auch voll.
+
+Der Tagesverlauf wird alle 15 Minuten aus der Cloud neu berechnet und dazwischen mit dem aktuellen Wert ergänzt.
+
+## 13. Verlauf nachladen
 
 Frisch eingerichtet beginnen die Diagramme in Symcon erst mit dem heutigen Tag. Die Hoymiles-Cloud hat aber den Verlauf der vergangenen Tage gespeichert. Diesen kann das Modul ins Archiv holen.
 
@@ -425,7 +448,7 @@ Frisch eingerichtet beginnen die Diagramme in Symcon erst mit dem heutigen Tag. 
 - Die Gesamtleistung („Leistung“) wird nicht nachgeladen, nur die Leistung je Eingang.
 - Voraussetzung: **Archivieren** ist eingeschaltet.
 
-## 13. Archivierung
+## 14. Archivierung
 
 Ist **Archivieren** eingeschaltet, richtet das Modul die Aufzeichnung im Symcon-Archiv selbst ein:
 
@@ -439,7 +462,7 @@ Durch die Einstellung als Zähler kann Symcon den Ertrag für beliebige Zeiträu
 
 Das Modul schaltet die Archivierung nur **ein**, nie aus. Wird das Häkchen entfernt, bleibt eine bereits eingerichtete Aufzeichnung bestehen und kann in der Konsole wie gewohnt selbst angepasst werden. Weitere Variablen (z. B. „PV 1 Ertrag heute“ oder die Ersparnis) lassen sich jederzeit von Hand zur Archivierung hinzufügen.
 
-## 14. Status der Instanz
+## 15. Status der Instanz
 
 Der Status wird oben im Konfigurationsformular und im Objektbaum angezeigt.
 
@@ -448,7 +471,7 @@ Der Status wird oben im Konfigurationsformular und im Objektbaum angezeigt.
 | 102 | Verbunden | Alles in Ordnung. |
 | 104 | Instanz ist deaktiviert | Der Schalter „Instanz aktiv“ ist aus. Zum Starten wieder einschalten. |
 | 204 | Bitte Zugangsdaten eintragen | Benutzername oder Passwort fehlen. |
-| 201 | Login fehlgeschlagen | Zugangsdaten prüfen (am besten in der App testen). Siehe [Fehlerbehebung](#17-fehlerbehebung). |
+| 201 | Login fehlgeschlagen | Zugangsdaten prüfen (am besten in der App testen). Siehe [Fehlerbehebung](#18-fehlerbehebung). |
 | 202 | Keine Anlage bzw. kein Wechselrichter gefunden | Im Konto ist keine Anlage oder kein Mikrowechselrichter vorhanden, oder die gewählte Anlage gehört nicht zum Konto. |
 | 203 | Fehler beim Abruf aus der Cloud | Die Cloud war nicht erreichbar oder hat einen Fehler gemeldet. Details stehen im Meldungsfenster. Meist nur vorübergehend. |
 
@@ -456,7 +479,7 @@ Der Status beschreibt die **Verbindung zur Cloud**. Probleme an der Anlage selbs
 
 Fehler werden nur beim **Wechsel** in einen Fehlerzustand ins Meldungsfenster geschrieben, nicht bei jeder Abfrage erneut.
 
-## 15. Befehle für eigene Skripte
+## 16. Befehle für eigene Skripte
 
 Die Funktionen tragen das Präfix `HOYM_`. Als erster Parameter wird jeweils die ID der Instanz übergeben.
 
@@ -490,7 +513,7 @@ asort($ertraege);
 echo 'Schwächster Eingang heute: ' . array_key_first($ertraege) . ' mit ' . reset($ertraege) . ' kWh';
 ```
 
-## 16. Datensicherheit
+## 17. Datensicherheit
 
 **Was das Modul schützt:**
 
@@ -508,13 +531,13 @@ echo 'Schwächster Eingang heute: ' . array_key_first($ertraege) . ' mit ' . res
 
 **Empfehlung:** Für das Hoymiles-Konto ein Passwort verwenden, das nirgendwo sonst genutzt wird. Dann bleibt der mögliche Schaden im schlimmsten Fall auf die Ansicht der PV-Anlage begrenzt.
 
-## 17. Fehlerbehebung
+## 18. Fehlerbehebung
 
 **„Verbindung testen“ meldet „Login fehlgeschlagen“**
 
 - Zugangsdaten in der S-Miles-App prüfen.
 - Die Meldung enthält für jede Anmeldeart die Antwort von Hoymiles. Steht dort etwa „can only be used in … app“, gehört das Konto zu einer bestimmten App – die automatische Erkennung sollte dann die passende Variante finden.
-- Klappt keine der drei Varianten, kann unter **Erweitert → Login-Variante** als letzter Versuch „Legacy (v0)“ gewählt werden (siehe [Datensicherheit](#16-datensicherheit)).
+- Klappt keine der drei Varianten, kann unter **Erweitert → Login-Variante** als letzter Versuch „Legacy (v0)“ gewählt werden (siehe [Datensicherheit](#17-datensicherheit)).
 
 **Meldung: PHP-Erweiterung „sodium“ fehlt**
 
@@ -569,14 +592,14 @@ Auf **Anlage neu einlesen** klicken. Das Modul passt die Variablen an.
 
 In der Konsole bei der Instanz auf **Debug** klicken. Dort erscheint jede Anfrage an die Cloud mit der Antwort. Anmeldedaten sind darin ausgeblendet. Bei Problemen hilft ein Ausschnitt aus diesem Fenster am meisten.
 
-## 18. Grenzen des Moduls
+## 19. Grenzen des Moduls
 
 - Hoymiles bietet **keine offizielle Schnittstelle** für Privatkunden an. Das Modul nutzt dieselben Wege wie die Hoymiles-Apps. Ändert Hoymiles diese mit einem Update, kann eine Anpassung des Moduls nötig werden.
 - Das Modul kann den Wechselrichter **neu starten, aus- und einschalten** und die DTU neu starten – aber **keine Leistungsbegrenzung** setzen und keine Firmware installieren.
 - Die Daten sind **bis zu etwa 5 Minuten alt**, weil sie über die Cloud laufen. Für eine sekundengenaue Regelung (etwa Nulleinspeisung oder PV-Überschussladen) ist eine lokale Anbindung bzw. ein Stromzähler besser geeignet.
 - Batteriespeicher von Hoymiles werden von diesem Modul nicht ausgelesen.
 
-## 19. Für Entwickler: Sprachen, Tests, GitHub
+## 20. Für Entwickler: Sprachen, Tests, GitHub
 
 **Sprachen:** Die Oberfläche ist in Englisch geschrieben und wird über `HoymilesCloud/locale.json` ins Deutsche übersetzt. Symcon zeigt automatisch die Sprache der Konsole an. Damit erfüllt das Modul die Voraussetzung für eine spätere Veröffentlichung im Symcon-Module-Store.
 
@@ -587,6 +610,7 @@ In der Konsole bei der Instanz auf **Debug** klicken. Dort erscheint jede Anfrag
 - Nachtmodus mit Datenstand, Helligkeitssensor und Sonnenaufgang
 - alle drei Störungswarnungen inkl. Wartezeit und „Störung behoben“, auch mit Speicher-Eingängen
 - Ersparnis, Firmware, Verlauf nachladen
+- die Kachel (Werte, Störung, Tagesverlauf, Aktualisieren-Schaltfläche)
 - Steuerbefehle (Neustart, Aus/Ein, DTU-Neustart) inkl. Fehlerfall und ruhender Warnungen im ausgeschalteten Zustand
 - dass bei falschem Passwort nie die unsichere Legacy-Anmeldung verwendet wird
 
@@ -599,10 +623,11 @@ git clone https://github.com/symcon/SymconStubs.git tests/stubs
 phpunit --configuration phpunit.xml
 ```
 
-## 20. Versionshistorie
+## 21. Versionshistorie
 
 | Version | Build | Änderungen |
 |---------|-------|------------|
+| 1.0 | 7 | Eigene Kachel für die Kachel-Visualisierung (Leistung mit Ring, Tagesverlauf, PV-Eingänge, Störung, Aktualisieren-Schaltfläche; passt sich Größe und hell/dunkel an) |
 | 1.0 | 6 | Wechselrichter neu starten, aus- und einschalten, DTU neu starten (über das Formular und `HOYM_SendCommand`) |
 | 1.0 | 5 | Variable „Störung“ zeigt „keine“ / „Störung“ statt „OK“ / „Alarm“; Einstellung je PV-Eingang „Solarmodul“, „Speicher“ (z. B. Zendure) oder „nicht belegt“ (Variablen werden ausgeblendet); Speicher-Eingänge werden bei den Warnungen „hell, aber kaum Leistung“ und „Eingang schwächer“ nicht berücksichtigt |
 | 1.0 | 4 | Störungswarnungen (keine Daten, hell aber kaum Leistung, Eingang schwächer) mit Push-Nachricht und Skript; Tagesertrag je PV-Eingang; Ersparnis in Euro; Firmware-Stände und Update-Hinweis; Verlauf ins Archiv nachladen; englische Oberfläche mit deutscher Übersetzung; automatische Tests und GitHub-Workflow; Tagesverläufe aller Eingänge mit einer Anfrage |
@@ -610,7 +635,7 @@ phpunit --configuration phpunit.xml
 | 1.0 | 2 | Legacy-Anmeldung nicht mehr in der automatischen Erkennung; gesalzener Prüfwert für die Zugangsdaten; Hinweis zum Abfrageintervall im Formular; Aktivierungsschalter; Versionsanzeige im Formular |
 | 1.0 | 1 | Erste Version |
 
-## 21. Lizenz und Dank
+## 22. Lizenz und Dank
 
 Dieses Modul steht unter der **MIT-Lizenz** (siehe Datei `LICENSE`).
 
