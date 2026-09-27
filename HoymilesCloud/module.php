@@ -766,12 +766,22 @@ class HoymilesCloud extends IPSModule
 
         // Tagesverlauf (Summe aller Eingänge) für die Kachel
         $curve = [];
+        $dataTs = (int) $this->GetValue('DataTime');
+        $lastTs = $dataTs && date('Y-m-d', $dataTs) === date('Y-m-d') ? $dataTs : null;
         foreach ($channels as $c) {
             $chart = $charts[$c['micro']][$c['port']] ?? null;
             if (!$chart) {
                 continue;
             }
-            foreach (HoymilesClient::chartPowerSamples($chart, date('Y-m-d')) as $sample) {
+            $this->SendDebug('Daily curve', sprintf(
+                '%s: %d axis labels (first "%s", last "%s"), %d values',
+                $c['name'],
+                count($chart['x_axis']),
+                (string) ($chart['x_axis'][0] ?? ''),
+                (string) (end($chart['x_axis']) ?: ''),
+                count($chart['series'][0]['data'] ?? [])
+            ), 0);
+            foreach (HoymilesClient::chartPowerSamples($chart, date('Y-m-d'), $lastTs) as $sample) {
                 $minute = (int) date('G', $sample['TimeStamp']) * 60 + (int) date('i', $sample['TimeStamp']);
                 $curve[$minute] = ($curve[$minute] ?? 0) + $sample['Value'];
             }
@@ -961,7 +971,7 @@ class HoymilesCloud extends IPSModule
                 $state = null;
                 if ($switchedOff) {
                     $state = false;
-                } elseif ($fresh === true && $mean >= 30) {
+                } elseif ($fresh === true && $mean >= $this->minComparePower($c)) {
                     $state = $powers[$c['ident']] < $mean * (1 - $deviation);
                 }
                 $percent = $mean > 0 ? (int) round($powers[$c['ident']] / $mean * 100) : 0;
@@ -1009,6 +1019,21 @@ class HoymilesCloud extends IPSModule
         $this->WriteAttributeString('AlarmActive', json_encode($newActive, JSON_FORCE_OBJECT));
         $this->setIfChanged('Alarm', (bool) $newActive);
         $this->setIfChanged('AlarmText', $newActive ? implode("\n", $newActive) : '');
+    }
+
+    /**
+     * Ab welcher Durchschnittsleistung der anderen Eingänge verglichen wird: mindestens 30 W
+     * bzw. 10 % der Nennleistung je Eingang. Bei wenig Licht (morgens, abends, bedeckt) wirken sich
+     * unterschiedliche Ausrichtungen sonst übermäßig aus.
+     */
+    private function minComparePower(array $channel): float
+    {
+        foreach (json_decode($this->ReadAttributeString('Micros'), true) ?: [] as $m) {
+            if ((int) $m['id'] === (int) $channel['micro'] && preg_match('/(\d{3,4})/', (string) $m['model'], $mm)) {
+                return max(30.0, (int) $mm[1] / max(1, (int) $m['ports']) * 0.1);
+            }
+        }
+        return 30.0;
     }
 
     /** Ist es hell genug, dass der Wechselrichter arbeiten müsste? (für die Offline-Warnung) */

@@ -26,7 +26,8 @@
     #hm {
         box-sizing: border-box;
         height: 100%;
-        padding: 10px 12px;
+        /* oben Platz lassen: dort blendet die Visualisierung Titel und Vollbild-Knopf ein */
+        padding: var(--top-safe, 48px) 14px 12px;
         display: flex;
         flex-direction: column;
         gap: 8px;
@@ -36,12 +37,11 @@
     .hidden { display: none !important; }
 
     /* Kopfzeile */
-    .head { display: flex; align-items: center; gap: 8px; min-height: 20px; }
-    .title { flex: 1; min-width: 0; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .title small { font-weight: 400; color: var(--muted); }
+    .head { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 30px; }
+    .title { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .pill {
         display: inline-flex; align-items: center; gap: 5px;
-        padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600;
+        padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
         background: var(--track); white-space: nowrap;
     }
     .pill svg { width: 12px; height: 12px; }
@@ -50,11 +50,12 @@
     .pill.fault { background: color-mix(in srgb, var(--critical) 18%, transparent); }
     .pill.fault svg { color: var(--critical); }
     .refresh {
-        border: 0; background: none; color: var(--faint); padding: 2px; cursor: pointer;
-        display: inline-flex; border-radius: 6px;
+        border: 0; background: var(--track); color: var(--muted); cursor: pointer;
+        width: 30px; height: 30px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 50%; position: relative; z-index: 2; -webkit-tap-highlight-color: transparent;
     }
-    .refresh:hover { color: currentColor; background: var(--track); }
-    .refresh svg { width: 14px; height: 14px; }
+    .refresh:hover, .refresh:active { color: currentColor; background: color-mix(in srgb, currentColor 20%, transparent); }
+    .refresh svg { width: 15px; height: 15px; }
     .refresh.spin svg { animation: spin 0.9s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -121,14 +122,28 @@
     .empty { margin: auto; text-align: center; color: var(--muted); font-size: 12px; }
 
     /* Kleine Kacheln: nur das Wichtigste */
-    @media (max-height: 210px) {
-        .curve, .inputs, .foot { display: none !important; }
+    /* mittlere Höhe: kompakter, bei Störung weicht der Tagesverlauf der Meldung */
+    @media (max-height: 400px) {
+        #hm { gap: 6px; }
+        .ring { width: 70px; height: 70px; }
+        .ring .sun svg { width: 26px; height: 26px; }
+        .power { font-size: 30px; }
+        .kpis { margin-top: 4px; }
+        .inputs { gap: 3px; }
+        .in { font-size: 11.5px; }
         .alarm { padding: 4px 8px; }
         .alarm span { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
-        .hero { flex: 1; }
+        #hm:has(.alarm:not(.hidden)) .curve { display: none !important; }
     }
     @media (max-height: 300px) { .curve { display: none !important; } }
+    /* flache Kacheln: nur Kopfzahl, Störung zeigt die Statusanzeige */
+    @media (max-height: 210px) {
+        #hm { --top-safe: 40px; }
+        .curve, .inputs, .foot, .alarm, .of { display: none !important; }
+        .hero { flex: 1; }
+    }
     @media (max-width: 240px) {
+        .title { display: none; }
         .ring { width: 60px; height: 60px; }
         .ring .sun svg { width: 22px; height: 22px; }
         .power { font-size: 26px; }
@@ -240,14 +255,7 @@
         hmSet('empty', L.notConfigured);
 
         // Kopfzeile
-        document.getElementById('title').innerHTML = '';
-        const title = document.getElementById('title');
-        title.append(document.createTextNode(s.name || 'Hoymiles'));
-        if (s.model) {
-            const small = document.createElement('small');
-            small.textContent = ' · ' + s.model;
-            title.append(small);
-        }
+        hmSet('title', [s.name, s.model].filter(Boolean).join(' · '));
         const pill = document.getElementById('pill');
         pill.className = 'pill ' + s.status;
         document.getElementById('pillIcon').innerHTML =
@@ -330,7 +338,11 @@
         if (!hasData || w < 40 || h < 30) { return; }
 
         const first = pts.find(p => p[1] > 0)[0], last = [...pts].reverse().find(p => p[1] > 0)[0];
-        const x0 = Math.min(first - 30, 6 * 60), x1 = Math.max(last + 30, 20 * 60);
+        const x0 = Math.max(0, Math.min(first - 30, 6 * 60)), x1 = Math.max(last + 30, 20 * 60);
+        // nur den sichtbaren Bereich zeichnen (die Cloud liefert auch die Nullwerte ab Mitternacht)
+        const inRange = pts.filter(p => p[0] >= x0 && p[0] <= x1);
+        pts.length = 0;
+        inRange.forEach(p => pts.push(p));
         const peak = Math.max(...pts.map(p => p[1]), 1);
         const top = 4, bottom = h - 14;
         const X = m => (m - x0) / (x1 - x0) * w;
