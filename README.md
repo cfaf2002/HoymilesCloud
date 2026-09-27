@@ -300,7 +300,7 @@ Das Modul prüft bei jeder Abfrage drei Dinge:
 |---------|------------------|----------------|
 | **Keine Daten** | Tagsüber kommen länger als eingestellt (Standard 60 Minuten) keine Daten vom Wechselrichter. Meist ist dann die DTU oder das WLAN offline. | Sobald wieder frische Daten kommen. Die Warnung bleibt auch über Nacht bestehen, damit sie nicht fälschlich als „behoben“ gemeldet wird. |
 | **Hell, aber kaum Leistung** | Der Helligkeitssensor zeigt mindestens die eingestellte Helligkeit, die Anlage liefert aber weniger als die Mindestleistung – und das länger als die Wartezeit. Hinweis auf Schnee, Verschattung oder einen Defekt. | Sobald die Leistung wieder passt oder es dunkler wird. |
-| **Eingang schwächer** | Ein PV-Eingang liefert länger als die Wartezeit deutlich weniger (Standard: mehr als 50 % weniger) als der Durchschnitt der anderen. Geprüft wird nur, wenn die anderen im Schnitt mindestens 30 W liefern. | Sobald der Eingang wieder aufholt. |
+| **Eingang schwächer** | Ein PV-Eingang liefert länger als die Wartezeit deutlich weniger (Standard: mehr als 50 % weniger) als der Durchschnitt der anderen. Geprüft wird nur, wenn die anderen im Schnitt mindestens 10 % ihrer Nennleistung liefern (beim HMS-1800-4T 45 W je Eingang, mindestens aber 30 W) – bei wenig Licht morgens, abends oder bei Bewölkung wirken sich unterschiedliche Ausrichtungen sonst zu stark aus. | Sobald der Eingang wieder aufholt. |
 
 **Was bei einer Störung passiert:**
 
@@ -627,6 +627,7 @@ phpunit --configuration phpunit.xml
 
 | Version | Build | Änderungen |
 |---------|-------|------------|
+| 1.0 | 8 | Kachel: Platz oben für Titel und Vollbild-Knopf der Visualisierung, größerer Aktualisieren-Knopf, kompaktere Darstellung bei mittlerer Höhe; Tagesverlauf auch bei anderen Zeitformaten der Cloud; Eingangsvergleich erst ab 10 % der Nennleistung |
 | 1.0 | 7 | Eigene Kachel für die Kachel-Visualisierung (Leistung mit Ring, Tagesverlauf, PV-Eingänge, Störung, Aktualisieren-Schaltfläche; passt sich Größe und hell/dunkel an) |
 | 1.0 | 6 | Wechselrichter neu starten, aus- und einschalten, DTU neu starten (über das Formular und `HOYM_SendCommand`) |
 | 1.0 | 5 | Variable „Störung“ zeigt „keine“ / „Störung“ statt „OK“ / „Alarm“; Einstellung je PV-Eingang „Solarmodul“, „Speicher“ (z. B. Zendure) oder „nicht belegt“ (Variablen werden ausgeblendet); Speicher-Eingänge werden bei den Warnungen „hell, aber kaum Leistung“ und „Eingang schwächer“ nicht berücksichtigt |
