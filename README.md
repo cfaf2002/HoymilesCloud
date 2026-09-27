@@ -627,6 +627,7 @@ phpunit --configuration phpunit.xml
 
 | Version | Build | Änderungen |
 |---------|-------|------------|
+| 1.0 | 9 | Geänderte PV-Eingänge oder Warn-Einstellungen setzen die betroffenen Warnungen sofort zurück; Tagesverlauf bleibt bei Störungsmeldung sichtbar, sofern Platz ist |
 | 1.0 | 8 | Kachel: Platz oben für Titel und Vollbild-Knopf der Visualisierung, größerer Aktualisieren-Knopf, kompaktere Darstellung bei mittlerer Höhe; Tagesverlauf auch bei anderen Zeitformaten der Cloud; Eingangsvergleich erst ab 10 % der Nennleistung |
 | 1.0 | 7 | Eigene Kachel für die Kachel-Visualisierung (Leistung mit Ring, Tagesverlauf, PV-Eingänge, Störung, Aktualisieren-Schaltfläche; passt sich Größe und hell/dunkel an) |
 | 1.0 | 6 | Wechselrichter neu starten, aus- und einschalten, DTU neu starten (über das Formular und `HOYM_SendCommand`) |
