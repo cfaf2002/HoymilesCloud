@@ -142,7 +142,21 @@
             "no confirmation from the DTU (timeout)": "keine Bestätigung der DTU (Zeitüberschreitung)",
             "error code %d": "Fehlercode %d",
             "The DTU of this inverter could not be determined.": "Die DTU dieses Wechselrichters konnte nicht ermittelt werden.",
-            "Switched off by command: %s": "Per Befehl ausgeschaltet: %s"
+            "Switched off by command: %s": "Per Befehl ausgeschaltet: %s",
+            "Rated power for the ring in the tile (0 = from the inverter model)": "Nennleistung für den Ring in der Kachel (0 = aus dem Wechselrichter-Modell)",
+            "Deactivated": "Deaktiviert",
+            "No connection": "Keine Verbindung",
+            "Switched off": "Ausgeschaltet",
+            "today": "heute",
+            "saved today": "heute gespart",
+            "Month": "Monat",
+            "Year": "Jahr",
+            "Data": "Daten",
+            "just now": "gerade eben",
+            "%d min ago": "vor %d Min.",
+            "%s % of %p W": "%s % von %p W",
+            "No curve for today yet": "Noch kein Tagesverlauf",
+            "Storage": "Speicher"
         }
     }
 }

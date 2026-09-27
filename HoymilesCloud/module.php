@@ -78,6 +78,9 @@ class HoymilesCloud extends IPSModule
         $this->RegisterPropertyFloat('PriceFeedIn', 0.0);
         $this->RegisterPropertyInteger('SelfConsumption', 100);
 
+        // Kachel
+        $this->RegisterPropertyInteger('TileMaxPower', 0); // 0 = aus dem Wechselrichter-Modell
+
         $this->RegisterAttributeString('Token', '');
         $this->RegisterAttributeInteger('TokenExpires', 0);
         $this->RegisterAttributeString('TokenMode', '');
@@ -99,12 +102,18 @@ class HoymilesCloud extends IPSModule
         $this->RegisterAttributeString('Command', '');      // laufender Steuerbefehl
         $this->RegisterAttributeString('DtuMap', '{}');     // Seriennummer Wechselrichter => DTU
         $this->RegisterAttributeString('SwitchedOff', '{}'); // per Befehl ausgeschaltete Wechselrichter
+        $this->RegisterAttributeString('TodayCurve', '[]');  // Tagesverlauf für die Kachel: [[Minute, W], …]
 
         $this->RegisterTimer('UpdateTimer', 0, 'HOYM_Update($_IPS[\'TARGET\']);');
         $this->RegisterTimer('BackfillTimer', 0, 'HOYM_BackfillStep($_IPS[\'TARGET\']);');
         $this->RegisterTimer('CommandTimer', 0, 'HOYM_CommandStep($_IPS[\'TARGET\']);');
 
         $this->registerProfiles();
+
+        // Eigene Kachel für die Kachel-Visualisierung (HTML-SDK)
+        if (method_exists($this, 'SetVisualizationType')) { // HTML-SDK ab Symcon 7.1
+            $this->SetVisualizationType(1);
+        }
     }
 
     public function ApplyChanges()
@@ -172,6 +181,7 @@ class HoymilesCloud extends IPSModule
         }
         // Erster Abruf kurz nach dem Übernehmen, damit das Speichern nicht blockiert
         $this->SetTimerInterval('UpdateTimer', 2000);
+        $this->pushTile();
         if ($this->ReadAttributeString('Backfill') !== '') {
             $this->SetTimerInterval('BackfillTimer', self::BACKFILL_TICK_MS);
         }
@@ -298,7 +308,27 @@ class HoymilesCloud extends IPSModule
             $this->saveClientState($client);
             $this->SetValue('LastUpdate', time());
             $this->scheduleNextUpdate($fresh);
+            $this->pushTile();
         }
+    }
+
+    /** Aktionen aus der Kachel (HTML-SDK). */
+    public function RequestAction($Ident, $Value)
+    {
+        switch ($Ident) {
+            case 'Refresh':
+                $this->Update();
+                break;
+            default:
+                throw new Exception('Invalid Ident');
+        }
+    }
+
+    /** Inhalt der Kachel für die Kachel-Visualisierung. */
+    public function GetVisualizationTile()
+    {
+        return file_get_contents(__DIR__ . '/module.html')
+            . '<script>handleMessage(' . json_encode($this->tileMessage()) . ');</script>';
     }
 
     /** Button „Verbindung testen“: frischer Login und Liste der Anlagen. */
@@ -524,6 +554,7 @@ class HoymilesCloud extends IPSModule
         }
         $this->SendDebug('Command', $msg, 0);
         $this->updateCommandForm($msg);
+        $this->pushTile();
     }
 
     // ---------------------------------------------------------------- Abruf
@@ -634,6 +665,7 @@ class HoymilesCloud extends IPSModule
                     $this->setIfChanged($c['ident'] . '_Energy', 0.0);
                 }
                 $this->WriteAttributeString('EnergyDate', date('Y-m-d'));
+                $this->WriteAttributeString('TodayCurve', '[]');
             } elseif ($wasFresh && $sameDay) {
                 // gerade eingeschlafen: Tagesertrag je Eingang ein letztes Mal berechnen
                 $this->updateChannelEnergy($client, $sid, $channels, $today, []);
@@ -731,6 +763,25 @@ class HoymilesCloud extends IPSModule
         foreach ($wh as $ident => $value) {
             $this->setIfChanged($ident . '_Energy', round($value * $scale / 1000, 3));
         }
+
+        // Tagesverlauf (Summe aller Eingänge) für die Kachel
+        $curve = [];
+        foreach ($channels as $c) {
+            $chart = $charts[$c['micro']][$c['port']] ?? null;
+            if (!$chart) {
+                continue;
+            }
+            foreach (HoymilesClient::chartPowerSamples($chart, date('Y-m-d')) as $sample) {
+                $minute = (int) date('G', $sample['TimeStamp']) * 60 + (int) date('i', $sample['TimeStamp']);
+                $curve[$minute] = ($curve[$minute] ?? 0) + $sample['Value'];
+            }
+        }
+        ksort($curve);
+        $points = [];
+        foreach ($curve as $minute => $watt) {
+            $points[] = [$minute, (int) round($watt * $scale)];
+        }
+        $this->WriteAttributeString('TodayCurve', json_encode($points));
         $this->WriteAttributeInteger('EnergyCalcAt', time());
         $this->WriteAttributeString('EnergyDate', date('Y-m-d'));
     }
@@ -1109,6 +1160,120 @@ class HoymilesCloud extends IPSModule
             $this->RegisterReference($new);
         }
         $this->WriteAttributeInteger('BrightnessRegistered', $new);
+    }
+
+    // ---------------------------------------------------------------- Kachel
+
+    private function pushTile(): void
+    {
+        $this->UpdateVisualizationValue($this->tileMessage());
+    }
+
+    /** Alle Daten der Kachel als JSON (wird beim Öffnen und nach jedem Abruf gesendet). */
+    private function tileMessage(): string
+    {
+        $channels = $this->channels();
+        $micros = json_decode($this->ReadAttributeString('Micros'), true) ?: [];
+        $sources = $this->inputSources();
+        $alarms = json_decode($this->ReadAttributeString('AlarmActive'), true) ?: [];
+        $switchedOff = (bool) (json_decode($this->ReadAttributeString('SwitchedOff'), true) ?: []);
+        $value = function (string $ident, $default = 0) {
+            return @$this->GetIDForIdent($ident) ? $this->GetValue($ident) : $default;
+        };
+
+        // Nennleistung: Einstellung, sonst aus dem Modellnamen (z. B. HMS-1800-4T -> 1800 W)
+        $ratedPerMicro = [];
+        foreach ($micros as $m) {
+            $ratedPerMicro[$m['id']] = preg_match('/(\d{3,4})/', (string) $m['model'], $mm) ? (int) $mm[1] : 0;
+        }
+        $pmax = $this->ReadPropertyInteger('TileMaxPower') ?: array_sum($ratedPerMicro);
+
+        $inputs = [];
+        foreach ($channels as $c) {
+            $source = $sources[$c['ident']] ?? 'panel';
+            if ($source === 'unused') {
+                continue;
+            }
+            $ports = 1;
+            foreach ($micros as $m) {
+                if ((int) $m['id'] === (int) $c['micro']) {
+                    $ports = max(1, (int) $m['ports']);
+                }
+            }
+            $inputs[] = [
+                'name'    => $c['name'],
+                'source'  => $source,
+                'power'   => (float) $value($c['ident'] . '_Power'),
+                'voltage' => (float) $value($c['ident'] . '_Voltage'),
+                'current' => (float) $value($c['ident'] . '_Current'),
+                'energy'  => (float) $value($c['ident'] . '_Energy'),
+                'max'     => ($ratedPerMicro[$c['micro']] ?? 0) > 0 ? $ratedPerMicro[$c['micro']] / $ports : 500,
+                'weak'    => isset($alarms['module_' . $c['ident']]),
+            ];
+        }
+
+        // Tagesverlauf plus aktueller Wert
+        $curve = json_decode($this->ReadAttributeString('TodayCurve'), true) ?: [];
+        $dataTs = (int) $value('DataTime');
+        $power = (float) $value('Power');
+        if ($dataTs && date('Y-m-d', $dataTs) === date('Y-m-d') && $value('Producing', false)) {
+            $minute = (int) date('G', $dataTs) * 60 + (int) date('i', $dataTs);
+            if (!$curve || end($curve)[0] < $minute) {
+                $curve[] = [$minute, (int) round($power)];
+            }
+        }
+
+        // Zustand für die Statusanzeige
+        $okStatus = in_array($this->GetStatus(), [self::STATUS_OK, IS_CREATING], true);
+        if (!$this->ReadPropertyBoolean('Active')) {
+            [$status, $text] = ['standby', $this->Translate('Deactivated')];
+        } elseif ($alarms) {
+            [$status, $text] = ['fault', $this->Translate('Fault')];
+        } elseif ($channels && !$okStatus) {
+            [$status, $text] = ['fault', $this->Translate('No connection')];
+        } elseif ($switchedOff) {
+            [$status, $text] = ['standby', $this->Translate('Switched off')];
+        } elseif ($value('Producing', false)) {
+            [$status, $text] = ['producing', $this->Translate('Producing')];
+        } elseif ($value('NightActive', false)) {
+            [$status, $text] = ['night', $this->Translate('Night')];
+        } else {
+            [$status, $text] = ['standby', $this->Translate('Standby')];
+        }
+
+        return json_encode([
+            'configured'   => (bool) $channels,
+            'name'         => $this->ReadAttributeString('StationName') ?: 'Hoymiles',
+            'model'        => implode(', ', array_column($micros, 'model')),
+            'status'       => $status,
+            'statusText'   => $text,
+            'alarm'        => $alarms ? implode("\n", $alarms) : '',
+            'power'        => $power,
+            'pmax'         => $pmax,
+            'today'        => (float) $value('EnergyToday'),
+            'month'        => (float) $value('EnergyMonth'),
+            'year'         => (float) $value('EnergyYear'),
+            'total'        => (float) $value('EnergyTotal'),
+            'savingsToday' => $this->ReadPropertyBoolean('Savings') ? (float) $value('SavingsToday') : null,
+            'dataTime'     => $dataTs,
+            'inputs'       => $inputs,
+            'curve'        => $curve,
+            'labels'       => [
+                'today'         => $this->Translate('today'),
+                'saved'         => $this->Translate('saved today'),
+                'month'         => $this->Translate('Month'),
+                'year'          => $this->Translate('Year'),
+                'dataTime'      => $this->Translate('Data'),
+                'justNow'       => $this->Translate('just now'),
+                'minAgo'        => $this->Translate('%d min ago'),
+                'ofRated'       => $this->Translate('%s % of %p W'),
+                'refresh'       => $this->Translate('Update now'),
+                'notConfigured' => $this->Translate('No plant read in yet.'),
+                'noCurve'       => $this->Translate('No curve for today yet'),
+                'storage'       => $this->Translate('Storage'),
+                'panel'         => $this->Translate('Solar panel'),
+            ],
+        ]);
     }
 
     // ---------------------------------------------------------- Steuerbefehle

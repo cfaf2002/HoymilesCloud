@@ -312,6 +312,14 @@
                     "suffix": "minutes",
                     "minimum": 5,
                     "maximum": 240
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "TileMaxPower",
+                    "caption": "Rated power for the ring in the tile (0 = from the inverter model)",
+                    "suffix": "W",
+                    "minimum": 0,
+                    "maximum": 100000
                 }
             ]
         }
