@@ -1,64 +1,315 @@
 {
     "elements": [
         {
+            "type": "CheckBox",
+            "name": "Active",
+            "caption": "Instance active (cyclic query of the cloud)"
+        },
+        {
             "type": "Label",
-            "caption": "Zugang zur Hoymiles S-Miles Cloud (dieselben Daten wie in der App)"
+            "caption": "Access to the Hoymiles S-Miles Cloud (same credentials as in the app)"
         },
         {
             "type": "ValidationTextBox",
             "name": "Username",
-            "caption": "Benutzer / E-Mail",
+            "caption": "User / e-mail",
             "width": "400px"
         },
         {
             "type": "PasswordTextBox",
             "name": "Password",
-            "caption": "Passwort",
+            "caption": "Password",
             "width": "400px"
         },
         {
             "type": "Select",
             "name": "StationID",
-            "caption": "Anlage",
+            "caption": "Plant",
             "width": "400px",
             "options": [
-                { "caption": "automatisch (erste Anlage)", "value": 0 }
+                {
+                    "caption": "automatic (first plant)",
+                    "value": 0
+                }
             ]
         },
         {
             "type": "NumberSpinner",
             "name": "UpdateInterval",
-            "caption": "Abfrageintervall",
-            "suffix": "Minuten",
+            "caption": "Query interval",
+            "suffix": "minutes",
             "minimum": 1,
             "maximum": 60
         },
         {
+            "type": "Label",
+            "caption": "Note: The Hoymiles cloud only calculates new values every 5 minutes. Shorter intervals do not deliver more recent data – \"Last query\" shows the rhythm of the module, \"Cloud data time\" that of the cloud."
+        },
+        {
             "type": "CheckBox",
             "name": "Archive",
-            "caption": "Leistung und Gesamtertrag archivieren (Gesamtertrag als Zähler)"
+            "caption": "Archive power and total yield (total yield as counter)"
         },
         {
             "type": "ExpansionPanel",
-            "caption": "Erweitert",
+            "caption": "Night mode",
+            "items": [
+                {
+                    "type": "CheckBox",
+                    "name": "NightMode",
+                    "caption": "Query less often at night"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "NightInterval",
+                    "caption": "Query interval at night",
+                    "suffix": "minutes",
+                    "minimum": 10,
+                    "maximum": 120
+                },
+                {
+                    "type": "SelectVariable",
+                    "name": "BrightnessVariable",
+                    "caption": "Brightness sensor (optional)",
+                    "width": "400px"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "BrightnessThreshold",
+                    "caption": "It is day from this brightness",
+                    "digits": 1,
+                    "minimum": 0,
+                    "maximum": 200000
+                },
+                {
+                    "type": "Label",
+                    "caption": "How night is detected: 1. brightness sensor (if selected), 2. sunrise and sunset from the Symcon instance \"Location\", 3. otherwise from the cloud data time. As long as the inverter still reports data, the normal interval is used. With a brightness sensor the module queries immediately in the morning once the threshold is reached; with the sun position exactly at sunrise."
+                },
+                {
+                    "type": "Label",
+                    "caption": "The threshold uses the unit of the sensor (e.g. lux). Tip: read the sensor value in the morning when the inverter starts working."
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "PV inputs",
+            "items": [
+                {
+                    "type": "Label",
+                    "caption": "If a storage system (e.g. Zendure SolarFlow Hub) is connected to an input instead of a solar panel, select \"Storage\" here. Its output depends on the battery control, not on the sun. Select \"Not connected\" for unused inputs. Storage and unused inputs are left out of the fault warnings \"bright but little power\" and \"input weaker\"; the variables of unused inputs are hidden."
+                },
+                {
+                    "type": "List",
+                    "name": "InputSources",
+                    "caption": "What is connected to each PV input?",
+                    "add": false,
+                    "delete": false,
+                    "rowCount": 4,
+                    "columns": [
+                        {
+                            "caption": "Ident",
+                            "name": "Ident",
+                            "width": "0px",
+                            "visible": false,
+                            "add": ""
+                        },
+                        {
+                            "caption": "PV input",
+                            "name": "Input",
+                            "width": "200px",
+                            "add": ""
+                        },
+                        {
+                            "caption": "Connected",
+                            "name": "Source",
+                            "width": "auto",
+                            "add": "panel",
+                            "edit": {
+                                "type": "Select",
+                                "options": [
+                                    {
+                                        "caption": "Solar panel",
+                                        "value": "panel"
+                                    },
+                                    {
+                                        "caption": "Storage (e.g. Zendure)",
+                                        "value": "storage"
+                                    },
+                                    {
+                                        "caption": "Not connected",
+                                        "value": "unused"
+                                    }
+                                ]
+                            }
+                        }
+                    ],
+                    "values": []
+                },
+                {
+                    "type": "Label",
+                    "caption": "The list is filled once the plant has been read in (\"Test connection\" or \"Read in plant again\")."
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Fault warnings",
+            "items": [
+                {
+                    "type": "CheckBox",
+                    "name": "AlarmOffline",
+                    "caption": "Warn if there is no data from the inverter during the day"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "AlarmOfflineMinutes",
+                    "caption": "No data for longer than",
+                    "suffix": "minutes",
+                    "minimum": 10,
+                    "maximum": 480
+                },
+                {
+                    "type": "CheckBox",
+                    "name": "AlarmLowPower",
+                    "caption": "Warn if it is bright but the plant delivers little power (brightness sensor required)"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "AlarmBrightness",
+                    "caption": "Brightness from which power is expected",
+                    "digits": 0,
+                    "minimum": 0,
+                    "maximum": 200000
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "AlarmMinPower",
+                    "caption": "Expected minimum power",
+                    "suffix": "W",
+                    "minimum": 0,
+                    "maximum": 10000
+                },
+                {
+                    "type": "CheckBox",
+                    "name": "AlarmModules",
+                    "caption": "Warn if one PV input delivers much less than the others"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "AlarmModuleDeviation",
+                    "caption": "Warn if an input is below the others by more than",
+                    "suffix": "%",
+                    "minimum": 10,
+                    "maximum": 95
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "AlarmDelay",
+                    "caption": "Only warn if the condition lasts at least",
+                    "suffix": "minutes",
+                    "minimum": 0,
+                    "maximum": 240
+                },
+                {
+                    "type": "Label",
+                    "caption": "The input comparison only makes sense if all panels face the same direction. Panels facing different directions deliver different power at different times of day – then switch this check off."
+                },
+                {
+                    "type": "SelectInstance",
+                    "name": "NotifyInstance",
+                    "caption": "Push notification via (WebFront or tile visualization, optional)",
+                    "width": "400px"
+                },
+                {
+                    "type": "SelectScript",
+                    "name": "NotifyScript",
+                    "caption": "Also run this script (optional)",
+                    "width": "400px"
+                },
+                {
+                    "type": "Label",
+                    "caption": "The script receives $_IPS['TITLE'], $_IPS['TEXT'], $_IPS['ALARM'] (true = fault, false = all clear) and $_IPS['INSTANCE'] – e.g. to forward the message via Telegram or e-mail. All faults are also written to the message log."
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Savings",
+            "items": [
+                {
+                    "type": "CheckBox",
+                    "name": "Savings",
+                    "caption": "Calculate savings in euros"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "PricePurchase",
+                    "caption": "Electricity price (purchase)",
+                    "suffix": "€/kWh",
+                    "digits": 4,
+                    "minimum": 0,
+                    "maximum": 5
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "SelfConsumption",
+                    "caption": "Share of the yield consumed yourself",
+                    "suffix": "%",
+                    "minimum": 0,
+                    "maximum": 100
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "PriceFeedIn",
+                    "caption": "Feed-in tariff for the rest",
+                    "suffix": "€/kWh",
+                    "digits": 4,
+                    "minimum": 0,
+                    "maximum": 5
+                },
+                {
+                    "type": "Label",
+                    "caption": "Savings = yield × (share consumed yourself × electricity price + rest × feed-in tariff). Balcony power plants usually consume almost everything themselves and get no feed-in tariff – then 100 % and 0 € fit."
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Advanced",
             "items": [
                 {
                     "type": "Select",
                     "name": "AuthMode",
-                    "caption": "Login-Variante",
+                    "caption": "Login variant",
                     "options": [
-                        { "caption": "automatisch", "value": "auto" },
-                        { "caption": "S-Miles Cloud (Web)", "value": "web_v3" },
-                        { "caption": "S-Miles Installer", "value": "installer_v3" },
-                        { "caption": "S-Miles Home", "value": "home_v3" },
-                        { "caption": "Legacy (v0)", "value": "legacy_v0" }
+                        {
+                            "caption": "automatic (secure variants only)",
+                            "value": "auto"
+                        },
+                        {
+                            "caption": "S-Miles Cloud (Web)",
+                            "value": "web_v3"
+                        },
+                        {
+                            "caption": "S-Miles Installer",
+                            "value": "installer_v3"
+                        },
+                        {
+                            "caption": "S-Miles Home",
+                            "value": "home_v3"
+                        },
+                        {
+                            "caption": "Legacy (v0) – insecure, only if nothing else works",
+                            "value": "legacy_v0"
+                        }
                     ]
                 },
                 {
                     "type": "NumberSpinner",
                     "name": "MaxAge",
-                    "caption": "Werte älter als … als 0 W werten (Nacht)",
-                    "suffix": "Minuten",
+                    "caption": "Treat values older than … as 0 W (night)",
+                    "suffix": "minutes",
                     "minimum": 5,
                     "maximum": 240
                 }
@@ -68,35 +319,103 @@
     "actions": [
         {
             "type": "Label",
+            "name": "Version",
+            "caption": "Hoymiles Cloud"
+        },
+        {
+            "type": "Label",
             "name": "DeviceInfo",
-            "caption": "Noch keine Anlage eingelesen."
+            "caption": "No plant read in yet."
         },
         {
             "type": "RowLayout",
             "items": [
                 {
                     "type": "Button",
-                    "caption": "Verbindung testen",
+                    "caption": "Test connection",
                     "onClick": "HOYM_TestConnection($id);"
                 },
                 {
                     "type": "Button",
-                    "caption": "Anlage neu einlesen",
+                    "caption": "Read in plant again",
                     "onClick": "HOYM_Discover($id);"
                 },
                 {
                     "type": "Button",
-                    "caption": "Jetzt aktualisieren",
+                    "caption": "Update now",
                     "onClick": "HOYM_Update($id);"
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Load history",
+            "items": [
+                {
+                    "type": "Label",
+                    "caption": "Loads the daily curves of the past days from the cloud into the archive: power of each PV input (5-minute values) and the meter reading of the total yield per day. Days that already have values in the archive are skipped. One day takes about 2 seconds."
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "BackfillDays",
+                    "caption": "Days",
+                    "value": 30,
+                    "minimum": 1,
+                    "maximum": 365
+                },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        {
+                            "type": "Button",
+                            "caption": "Load history",
+                            "onClick": "HOYM_Backfill($id, $BackfillDays);"
+                        },
+                        {
+                            "type": "Button",
+                            "caption": "Cancel",
+                            "onClick": "HOYM_BackfillCancel($id);"
+                        }
+                    ]
+                },
+                {
+                    "type": "Label",
+                    "name": "BackfillStatus",
+                    "caption": "No history loading running."
                 }
             ]
         }
     ],
     "status": [
-        { "code": 102, "icon": "active", "caption": "Verbunden" },
-        { "code": 104, "icon": "inactive", "caption": "Bitte Zugangsdaten eintragen" },
-        { "code": 201, "icon": "error", "caption": "Login fehlgeschlagen – Zugangsdaten oder Login-Variante prüfen" },
-        { "code": 202, "icon": "error", "caption": "Keine Anlage bzw. kein Wechselrichter gefunden" },
-        { "code": 203, "icon": "error", "caption": "Fehler beim Abruf aus der Cloud (Details im Meldungsfenster)" }
+        {
+            "code": 102,
+            "icon": "active",
+            "caption": "Connected"
+        },
+        {
+            "code": 104,
+            "icon": "inactive",
+            "caption": "Instance is deactivated"
+        },
+        {
+            "code": 204,
+            "icon": "inactive",
+            "caption": "Please enter credentials"
+        },
+        {
+            "code": 201,
+            "icon": "error",
+            "caption": "Login failed – check credentials or login variant"
+        },
+        {
+            "code": 202,
+            "icon": "error",
+            "caption": "No plant or inverter found"
+        },
+        {
+            "code": 203,
+            "icon": "error",
+            "caption": "Error while querying the cloud (details in the message log)"
+        }
     ]
 }

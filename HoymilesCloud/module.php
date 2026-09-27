@@ -11,18 +11,28 @@ class HoymilesDeviceException extends HoymilesException
 class HoymilesCloud extends IPSModule
 {
     private const STATUS_OK = 102;
-    private const STATUS_NO_CREDENTIALS = 104;
+    private const STATUS_INACTIVE = 104;
+    private const STATUS_NO_CREDENTIALS = 204;
     private const STATUS_AUTH_ERROR = 201;
     private const STATUS_NO_DEVICE = 202;
     private const STATUS_CLOUD_ERROR = 203;
 
     private const ARCHIVE_GUID = '{43192F0B-135B-4CE7-A0A7-1475603F3060}';
-    private const CHANNEL_IDENT = '/^(WR\d+_)?PV\d+_(Power|Voltage|Current)$/';
+    private const LOCATION_GUID = '{45E97A63-F870-408A-B259-2933F7EABF74}';
+    private const WEBFRONT_GUID = '{3565B1F2-8F7B-4311-A4B6-1BF1D868F39E}';
+    private const TILE_VISU_GUID = '{B5B875BB-9B76-45FD-4E67-2607E45B3AC4}';
+
+    private const CHANNEL_IDENT = '/^(WR\d+_)?PV\d+_(Power|Voltage|Current|Energy)$/';
+    private const ENERGY_CALC_INTERVAL = 900;   // Ertrag je PV-Eingang höchstens alle 15 Minuten neu berechnen
+    private const FIRMWARE_CHECK_INTERVAL = 86400;
+    private const BACKFILL_TICK_MS = 1500;
 
     public function Create()
     {
         parent::Create();
 
+        // Zugang und Abfrage
+        $this->RegisterPropertyBoolean('Active', true);
         $this->RegisterPropertyString('Username', '');
         $this->RegisterPropertyString('Password', '');
         $this->RegisterPropertyInteger('StationID', 0);
@@ -31,21 +41,56 @@ class HoymilesCloud extends IPSModule
         $this->RegisterPropertyString('AuthMode', 'auto');
         $this->RegisterPropertyInteger('MaxAge', 20);
 
+        // Nachtmodus
+        $this->RegisterPropertyBoolean('NightMode', true);
+        $this->RegisterPropertyInteger('NightInterval', 30);
+        $this->RegisterPropertyInteger('BrightnessVariable', 0);
+        $this->RegisterPropertyFloat('BrightnessThreshold', 50.0);
+
+        // Was hängt an welchem PV-Eingang? (Solarmodul oder Speicher wie Zendure)
+        $this->RegisterPropertyString('InputSources', '[]');
+
+        // Störungswarnungen
+        $this->RegisterPropertyBoolean('AlarmOffline', true);
+        $this->RegisterPropertyInteger('AlarmOfflineMinutes', 60);
+        $this->RegisterPropertyBoolean('AlarmLowPower', true);
+        $this->RegisterPropertyFloat('AlarmBrightness', 10000.0);
+        $this->RegisterPropertyInteger('AlarmMinPower', 50);
+        $this->RegisterPropertyBoolean('AlarmModules', true);
+        $this->RegisterPropertyInteger('AlarmModuleDeviation', 50);
+        $this->RegisterPropertyInteger('AlarmDelay', 30);
+        $this->RegisterPropertyInteger('NotifyInstance', 0);
+        $this->RegisterPropertyInteger('NotifyScript', 0);
+
+        // Ersparnis
+        $this->RegisterPropertyBoolean('Savings', true);
+        $this->RegisterPropertyFloat('PricePurchase', 0.30);
+        $this->RegisterPropertyFloat('PriceFeedIn', 0.0);
+        $this->RegisterPropertyInteger('SelfConsumption', 100);
+
         $this->RegisterAttributeString('Token', '');
         $this->RegisterAttributeInteger('TokenExpires', 0);
         $this->RegisterAttributeString('TokenMode', '');
         $this->RegisterAttributeString('AuthHash', '');
+        $this->RegisterAttributeString('AuthSalt', '');
         $this->RegisterAttributeString('Stations', '{}');   // id => Name (für das Formular)
         $this->RegisterAttributeInteger('ActiveStation', 0);
         $this->RegisterAttributeString('StationName', '');
         $this->RegisterAttributeString('Micros', '[]');
         $this->RegisterAttributeString('Channels', '[]');
+        $this->RegisterAttributeInteger('BrightnessRegistered', 0);
+        $this->RegisterAttributeInteger('EnergyCalcAt', 0);
+        $this->RegisterAttributeString('EnergyDate', '');
+        $this->RegisterAttributeBoolean('WasFresh', false);
+        $this->RegisterAttributeString('AlarmSince', '{}');
+        $this->RegisterAttributeString('AlarmActive', '{}');
+        $this->RegisterAttributeInteger('FirmwareCheckedAt', 0);
+        $this->RegisterAttributeString('Backfill', '');
 
         $this->RegisterTimer('UpdateTimer', 0, 'HOYM_Update($_IPS[\'TARGET\']);');
+        $this->RegisterTimer('BackfillTimer', 0, 'HOYM_BackfillStep($_IPS[\'TARGET\']);');
 
-        $this->registerProfile('HOYM.Voltage', ' V', 1);
-        $this->registerProfile('HOYM.Current', ' A', 2);
-        $this->registerProfile('HOYM.kg', ' kg', 1);
+        $this->registerProfiles();
     }
 
     public function ApplyChanges()
@@ -56,19 +101,36 @@ class HoymilesCloud extends IPSModule
         if (IPS_GetKernelRunlevel() !== KR_READY) {
             return;
         }
+        $this->registerProfiles();
 
-        $this->RegisterVariableFloat('Power', 'Leistung', '~Watt', 1);
-        $this->RegisterVariableFloat('EnergyToday', 'Ertrag heute', '~Electricity', 2);
-        $this->RegisterVariableFloat('EnergyMonth', 'Ertrag Monat', '~Electricity', 3);
-        $this->RegisterVariableFloat('EnergyYear', 'Ertrag Jahr', '~Electricity', 4);
-        $this->RegisterVariableFloat('EnergyTotal', 'Ertrag gesamt', '~Electricity', 5);
-        $this->RegisterVariableFloat('CO2', 'CO₂-Einsparung', 'HOYM.kg', 6);
-        $this->RegisterVariableInteger('DataTime', 'Datenstand Cloud', '~UnixTimestamp', 7);
-        $this->RegisterVariableInteger('LastUpdate', 'Letzte Abfrage', '~UnixTimestamp', 8);
+        $this->RegisterVariableBoolean('Producing', $this->Translate('Producing'), 'HOYM.Producing', 0);
+        $this->RegisterVariableFloat('Power', $this->Translate('Power'), '~Watt', 1);
+        $this->RegisterVariableFloat('EnergyToday', $this->Translate('Yield today'), '~Electricity', 2);
+        $this->RegisterVariableFloat('EnergyMonth', $this->Translate('Yield month'), '~Electricity', 3);
+        $this->RegisterVariableFloat('EnergyYear', $this->Translate('Yield year'), '~Electricity', 4);
+        $this->RegisterVariableFloat('EnergyTotal', $this->Translate('Yield total'), '~Electricity', 5);
+        $this->RegisterVariableFloat('CO2', $this->Translate('CO₂ saved'), 'HOYM.kg', 6);
+        $this->RegisterVariableInteger('DataTime', $this->Translate('Cloud data time'), '~UnixTimestamp', 7);
+        $this->RegisterVariableInteger('LastUpdate', $this->Translate('Last query'), '~UnixTimestamp', 8);
+        $this->RegisterVariableBoolean('NightActive', $this->Translate('Night mode'), 'HOYM.Night', 9);
+        $this->RegisterVariableBoolean('Alarm', $this->Translate('Fault'), '~Alert', 10);
+        $this->RegisterVariableString('AlarmText', $this->Translate('Fault message'), '', 11);
+
+        $savings = $this->ReadPropertyBoolean('Savings');
+        $this->MaintainVariable('SavingsToday', $this->Translate('Savings today'), VARIABLETYPE_FLOAT, 'HOYM.Euro', 12, $savings);
+        $this->MaintainVariable('SavingsMonth', $this->Translate('Savings month'), VARIABLETYPE_FLOAT, 'HOYM.Euro', 13, $savings);
+        $this->MaintainVariable('SavingsYear', $this->Translate('Savings year'), VARIABLETYPE_FLOAT, 'HOYM.Euro', 14, $savings);
+        $this->MaintainVariable('SavingsTotal', $this->Translate('Savings total'), VARIABLETYPE_FLOAT, 'HOYM.Euro', 15, $savings);
+
+        $this->RegisterVariableString('FirmwareDTU', $this->Translate('Firmware DTU'), '', 16);
+        $this->RegisterVariableString('FirmwareInverter', $this->Translate('Firmware inverter'), '', 17);
+        $this->RegisterVariableBoolean('FirmwareUpdate', $this->Translate('Firmware update'), 'HOYM.Update', 18);
+
+        $this->registerBrightnessSensor();
 
         // Zugangsdaten geändert -> Token verwerfen
-        $authHash = md5($this->ReadPropertyString('Username') . '|' . $this->ReadPropertyString('Password') . '|' . $this->ReadPropertyString('AuthMode'));
-        if ($authHash !== $this->ReadAttributeString('AuthHash')) {
+        $authHash = $this->credentialFingerprint();
+        if (!hash_equals($this->ReadAttributeString('AuthHash'), $authHash)) {
             $this->WriteAttributeString('AuthHash', $authHash);
             $this->WriteAttributeString('Token', '');
             $this->WriteAttributeInteger('TokenExpires', 0);
@@ -80,8 +142,15 @@ class HoymilesCloud extends IPSModule
         }
 
         $this->maintainChannelVariables($this->channels());
+        $this->hideUnusedInputs();
         $this->updateSummary();
 
+        if (!$this->ReadPropertyBoolean('Active')) {
+            $this->SetTimerInterval('UpdateTimer', 0);
+            $this->SetTimerInterval('BackfillTimer', 0);
+            $this->SetStatus(self::STATUS_INACTIVE);
+            return;
+        }
         if (!$this->hasCredentials()) {
             $this->SetTimerInterval('UpdateTimer', 0);
             $this->SetStatus(self::STATUS_NO_CREDENTIALS);
@@ -89,12 +158,28 @@ class HoymilesCloud extends IPSModule
         }
         // Erster Abruf kurz nach dem Übernehmen, damit das Speichern nicht blockiert
         $this->SetTimerInterval('UpdateTimer', 2000);
+        if ($this->ReadAttributeString('Backfill') !== '') {
+            $this->SetTimerInterval('BackfillTimer', self::BACKFILL_TICK_MS);
+        }
     }
 
     public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
     {
         if ($Message === IPS_KERNELSTARTED) {
             $this->ApplyChanges();
+            return;
+        }
+        // Helligkeitssensor: wird es hell, sofort abfragen statt auf das Nachtintervall zu warten
+        if ($Message === VM_UPDATE && $SenderID === $this->ReadAttributeInteger('BrightnessRegistered')) {
+            if (!$this->ReadPropertyBoolean('Active') || !$this->ReadPropertyBoolean('NightMode') || !$this->hasCredentials()) {
+                return;
+            }
+            $brightness = (float) $Data[0];
+            if ($brightness >= $this->ReadPropertyFloat('BrightnessThreshold') && $this->GetValue('NightActive')) {
+                $this->SendDebug('Night mode', "brightness $brightness reached the threshold – day mode, querying now", 0);
+                $this->SetValue('NightActive', false);
+                $this->SetTimerInterval('UpdateTimer', 1000);
+            }
         }
     }
 
@@ -105,7 +190,7 @@ class HoymilesCloud extends IPSModule
         $stations = json_decode($this->ReadAttributeString('Stations'), true) ?: [];
         $selected = $this->ReadPropertyInteger('StationID');
         if ($selected !== 0 && !isset($stations[$selected])) {
-            $stations[$selected] = 'Anlage ' . $selected;
+            $stations[$selected] = $this->Translate('Plant') . ' ' . $selected;
         }
         foreach ($form['elements'] as &$element) {
             if (($element['name'] ?? '') === 'StationID') {
@@ -113,12 +198,33 @@ class HoymilesCloud extends IPSModule
                     $element['options'][] = ['caption' => "$name ($id)", 'value' => (int) $id];
                 }
             }
+            foreach ($element['items'] ?? [] as $k => $item) {
+                if (($item['name'] ?? '') === 'InputSources') {
+                    $sources = $this->inputSources();
+                    $rows = [];
+                    foreach ($this->channels() as $c) {
+                        $rows[] = ['Ident' => $c['ident'], 'Input' => $c['name'], 'Source' => $sources[$c['ident']] ?? 'panel'];
+                    }
+                    $element['items'][$k]['values'] = $rows;
+                    $element['items'][$k]['rowCount'] = max(1, count($rows));
+                }
+            }
         }
         unset($element);
 
         foreach ($form['actions'] as &$action) {
-            if (($action['name'] ?? '') === 'DeviceInfo') {
-                $action['caption'] = $this->deviceInfo();
+            switch ($action['name'] ?? '') {
+                case 'DeviceInfo':
+                    $action['caption'] = $this->deviceInfo();
+                    break;
+                case 'Version':
+                    $library = json_decode((string) file_get_contents(__DIR__ . '/../library.json'), true);
+                    $action['caption'] = 'Hoymiles Cloud – ' . $this->Translate('Version') . ' ' . ($library['version'] ?? '?')
+                        . ' (Build ' . ($library['build'] ?? '?') . ')';
+                    break;
+                case 'BackfillStatus':
+                    $action['caption'] = $this->backfillStatusText();
+                    break;
             }
         }
         unset($action);
@@ -131,18 +237,24 @@ class HoymilesCloud extends IPSModule
     /** Zyklischer Abruf (Timer) – kann auch per HOYM_Update(ID) aufgerufen werden. */
     public function Update(): void
     {
-        $this->SetTimerInterval('UpdateTimer', max(1, $this->ReadPropertyInteger('UpdateInterval')) * 60000);
+        if (!$this->ReadPropertyBoolean('Active')) {
+            $this->SetTimerInterval('UpdateTimer', 0);
+            $this->SetStatus(self::STATUS_INACTIVE);
+            return;
+        }
         if (!$this->hasCredentials()) {
+            $this->SetTimerInterval('UpdateTimer', 0);
             $this->SetStatus(self::STATUS_NO_CREDENTIALS);
             return;
         }
 
         $client = $this->client();
+        $fresh = null; // unbekannt, falls der Abruf scheitert
         try {
             if (!$this->channels()) {
                 $this->discoverDevices($client);
             }
-            $this->fetch($client);
+            $fresh = $this->fetch($client);
             $this->SetStatus(self::STATUS_OK);
         } catch (HoymilesAuthException $e) {
             $this->fail(self::STATUS_AUTH_ERROR, $e);
@@ -151,8 +263,14 @@ class HoymilesCloud extends IPSModule
         } catch (Throwable $e) {
             $this->fail(self::STATUS_CLOUD_ERROR, $e);
         } finally {
+            if ($fresh !== null) {
+                $this->updateSavings();
+                $this->checkFirmware($client, $fresh);
+            }
+            $this->evaluateAlarms($fresh);
             $this->saveClientState($client);
             $this->SetValue('LastUpdate', time());
+            $this->scheduleNextUpdate($fresh);
         }
     }
 
@@ -165,20 +283,20 @@ class HoymilesCloud extends IPSModule
             $stations = $client->getStations();
             $names = [];
             foreach ($stations as $id => $s) {
-                $names[$id] = (string) ($s['name'] ?? "Anlage $id");
+                $names[$id] = (string) ($s['name'] ?? $this->Translate('Plant') . " $id");
             }
             $this->WriteAttributeString('Stations', json_encode($names, JSON_FORCE_OBJECT));
             $this->saveClientState($client);
             $this->ReloadForm();
 
-            $text = 'Login OK (Variante: ' . $client->getAuthMode() . ")\n\nAnlagen:\n";
+            $text = sprintf($this->Translate('Login OK (variant: %s)'), $client->getAuthMode()) . "\n\n" . $this->Translate('Plants') . ":\n";
             foreach ($names as $id => $name) {
                 $text .= "• $name ($id)\n";
             }
             echo $text;
         } catch (Throwable $e) {
             $this->saveClientState($client);
-            echo 'Fehler: ' . $e->getMessage();
+            echo $this->Translate('Error') . ': ' . $e->getMessage();
         }
     }
 
@@ -188,14 +306,105 @@ class HoymilesCloud extends IPSModule
         $client = $this->client();
         try {
             $this->discoverDevices($client);
+            $this->WriteAttributeInteger('FirmwareCheckedAt', 0); // Firmware beim nächsten Abruf neu lesen
             $this->saveClientState($client);
             $this->ReloadForm();
-            echo $this->deviceInfo() . "\n\nVariablen wurden angelegt, Werte folgen mit dem nächsten Abruf.";
-            $this->SetTimerInterval('UpdateTimer', 2000);
+            echo $this->deviceInfo() . "\n\n" . $this->Translate('Variables have been created, values follow with the next query.');
+            if ($this->ReadPropertyBoolean('Active')) {
+                $this->SetTimerInterval('UpdateTimer', 2000);
+            }
         } catch (Throwable $e) {
             $this->saveClientState($client);
-            echo 'Fehler: ' . $e->getMessage();
+            echo $this->Translate('Error') . ': ' . $e->getMessage();
         }
+    }
+
+    /** Button „Verlauf nachladen“: Tagesverläufe der letzten $Days Tage ins Archiv schreiben. */
+    public function Backfill(int $Days): void
+    {
+        $Days = max(1, min(365, $Days));
+        if (!$this->hasCredentials() || !$this->channels()) {
+            echo $this->Translate('Please set up the instance first (credentials, "Test connection").');
+            return;
+        }
+        if (!$this->archiveId()) {
+            echo $this->Translate('No archive instance found.');
+            return;
+        }
+        if (!$this->ReadPropertyBoolean('Archive')) {
+            echo $this->Translate('Please enable "Archive" first.');
+            return;
+        }
+        $dates = [];
+        for ($d = $Days; $d >= 1; $d--) {
+            $dates[] = date('Y-m-d', strtotime("-$d day")); // älteste zuerst
+        }
+        $this->WriteAttributeString('Backfill', json_encode([
+            'total'   => $Days,
+            'pending' => $dates,
+            'energy'  => [],           // Datum => Wh (DC, alle Eingänge)
+            'retries' => 0,
+            'skipped' => [],
+            'started' => time(),
+        ]));
+        $this->SetTimerInterval('BackfillTimer', 500);
+        $this->SendDebug('Backfill', "started for $Days days", 0);
+        echo sprintf($this->Translate('Loading history for %d days started. This takes about %d minutes. Progress is shown in the form.'), $Days, max(1, (int) ceil($Days * 2 / 60)));
+    }
+
+    /** Button „Nachladen abbrechen“. */
+    public function BackfillCancel(): void
+    {
+        $this->WriteAttributeString('Backfill', '');
+        $this->SetTimerInterval('BackfillTimer', 0);
+        $this->updateBackfillForm();
+        echo $this->Translate('Loading history cancelled.');
+    }
+
+    /** Ein Schritt des Nachladens (Timer): ein Tag je Aufruf. */
+    public function BackfillStep(): void
+    {
+        $job = json_decode($this->ReadAttributeString('Backfill'), true);
+        if (!is_array($job)) {
+            $this->SetTimerInterval('BackfillTimer', 0);
+            return;
+        }
+        $this->SetTimerInterval('BackfillTimer', self::BACKFILL_TICK_MS);
+
+        if ($job['pending']) {
+            $date = $job['pending'][0];
+            $client = $this->client();
+            try {
+                $job['energy'][$date] = $this->backfillDay($client, $date);
+                array_shift($job['pending']);
+                $job['retries'] = 0;
+            } catch (Throwable $e) {
+                $this->SendDebug('Backfill', "$date: " . $e->getMessage(), 0);
+                if (++$job['retries'] >= 3) {
+                    $job['skipped'][] = $date;
+                    array_shift($job['pending']);
+                    $job['retries'] = 0;
+                }
+            }
+            $this->saveClientState($client);
+            $this->WriteAttributeString('Backfill', json_encode($job));
+            $this->updateBackfillForm();
+            return;
+        }
+
+        // Alle Tage geladen: Zählerstände für „Ertrag gesamt“ berechnen und eintragen
+        $this->SetTimerInterval('BackfillTimer', 0);
+        $counterDays = $this->backfillCounter($job['energy']);
+        $this->WriteAttributeString('Backfill', '');
+        $msg = sprintf(
+            $this->Translate('History loaded: %d days, %d counter values added, %d days skipped.'),
+            count($job['energy']),
+            $counterDays,
+            count($job['skipped'])
+        );
+        $this->LogMessage($msg, KL_NOTIFY);
+        $this->SendDebug('Backfill', $msg, 0);
+        $this->updateBackfillForm($msg);
     }
 
     // ---------------------------------------------------------------- Abruf
@@ -204,24 +413,24 @@ class HoymilesCloud extends IPSModule
     {
         $stations = $client->getStations();
         if (!$stations) {
-            throw new HoymilesDeviceException('Keine Anlage im Konto gefunden');
+            throw new HoymilesDeviceException($this->Translate('No plant found in this account'));
         }
         $names = [];
         foreach ($stations as $id => $s) {
-            $names[$id] = (string) ($s['name'] ?? "Anlage $id");
+            $names[$id] = (string) ($s['name'] ?? $this->Translate('Plant') . " $id");
         }
         $this->WriteAttributeString('Stations', json_encode($names, JSON_FORCE_OBJECT));
 
         $sid = $this->ReadPropertyInteger('StationID') ?: (int) array_key_first($stations);
         if (!isset($stations[$sid])) {
-            throw new HoymilesDeviceException("Anlage $sid gehört nicht zu diesem Konto");
+            throw new HoymilesDeviceException(sprintf($this->Translate('Plant %d does not belong to this account'), $sid));
         }
 
         $micros = [];
         foreach ($client->getMicroinverters($sid) as $m) {
             $mid = (int) $m['id'];
             $detail = $client->getMicroDetail($sid, $mid);
-            $this->SendDebug('Wechselrichter', json_encode($detail), 0);
+            $this->SendDebug('Inverter', json_encode($detail), 0);
             $model = (string) ($detail['init_hard_no'] ?? $m['init_hard_no'] ?? '');
             $ports = (int) ($detail['rule']['port'] ?? 0);
             if ($ports < 1) {
@@ -231,7 +440,7 @@ class HoymilesCloud extends IPSModule
             $micros[] = ['id' => $mid, 'sn' => (string) ($m['sn'] ?? $detail['sn'] ?? ''), 'model' => $model, 'ports' => $ports];
         }
         if (!$micros) {
-            throw new HoymilesDeviceException('Keine Mikrowechselrichter in der Anlage gefunden');
+            throw new HoymilesDeviceException($this->Translate('No microinverters found in this plant'));
         }
 
         // Bei genau einem Wechselrichter entspricht PV-Eingang n dem Anlagen-Kanal n
@@ -241,7 +450,7 @@ class HoymilesCloud extends IPSModule
             for ($p = 1; $p <= $m['ports']; $p++) {
                 $channels[] = [
                     'ident'   => $single ? "PV$p" : 'WR' . ($k + 1) . "_PV$p",
-                    'name'    => $single ? "PV $p" : 'WR ' . ($k + 1) . " PV $p",
+                    'name'    => $single ? "PV $p" : $this->Translate('INV') . ' ' . ($k + 1) . " PV $p",
                     'micro'   => $m['id'],
                     'port'    => $p,
                     'channel' => $single ? $p : null,
@@ -254,10 +463,12 @@ class HoymilesCloud extends IPSModule
         $this->WriteAttributeString('Micros', json_encode($micros));
         $this->WriteAttributeString('Channels', json_encode($channels));
         $this->maintainChannelVariables($channels);
+        $this->hideUnusedInputs();
         $this->updateSummary();
     }
 
-    private function fetch(HoymilesClient $client): void
+    /** Holt alle Werte; liefert true, wenn der Wechselrichter aktuelle Daten meldet (wach ist). */
+    private function fetch(HoymilesClient $client): bool
     {
         $sid = $this->ReadAttributeInteger('ActiveStation');
         $maxAge = max(5, $this->ReadPropertyInteger('MaxAge'));
@@ -271,8 +482,11 @@ class HoymilesCloud extends IPSModule
         $fresh = $dataTs === 0 || (time() - $dataTs) <= $maxAge * 60;
         $sameDay = $dataTs === 0 || date('Y-m-d', $dataTs) === date('Y-m-d');
 
-        $this->setIfChanged('Power', $fresh ? $num($rt['real_power'] ?? null) : 0.0);
-        $this->setIfChanged('EnergyToday', $sameDay ? $num($rt['today_eq'] ?? null) / 1000 : 0.0);
+        $power = $fresh ? $num($rt['real_power'] ?? null) : 0.0;
+        $this->setIfChanged('Power', $power);
+        $this->setIfChanged('Producing', $fresh && $power > 0);
+        $today = $sameDay ? $num($rt['today_eq'] ?? null) / 1000 : 0.0;
+        $this->setIfChanged('EnergyToday', $today);
         $this->setIfChanged('EnergyMonth', $num($rt['month_eq'] ?? null) / 1000);
         $this->setIfChanged('EnergyYear', $num($rt['year_eq'] ?? null) / 1000);
         $total = $num($rt['total_eq'] ?? null) / 1000;
@@ -284,8 +498,31 @@ class HoymilesCloud extends IPSModule
             $this->setIfChanged('DataTime', $dataTs);
         }
 
-        // PV-Eingänge: zuerst Anlagen-Indikatoren, fehlende aus dem Tagesverlauf
         $channels = $this->channels();
+        $wasFresh = $this->ReadAttributeBoolean('WasFresh');
+        $this->WriteAttributeBoolean('WasFresh', $fresh);
+
+        if (!$fresh) {
+            // Wechselrichter schläft: PV-Eingänge auf 0
+            foreach ($channels as $c) {
+                $this->setIfChanged($c['ident'] . '_Power', 0.0);
+                $this->setIfChanged($c['ident'] . '_Voltage', 0.0);
+                $this->setIfChanged($c['ident'] . '_Current', 0.0);
+            }
+            if (!$sameDay && $this->ReadAttributeString('EnergyDate') !== date('Y-m-d')) {
+                // neuer Tag, Anlage schläft noch: Tageserträge je Eingang zurücksetzen
+                foreach ($channels as $c) {
+                    $this->setIfChanged($c['ident'] . '_Energy', 0.0);
+                }
+                $this->WriteAttributeString('EnergyDate', date('Y-m-d'));
+            } elseif ($wasFresh && $sameDay) {
+                // gerade eingeschlafen: Tagesertrag je Eingang ein letztes Mal berechnen
+                $this->updateChannelEnergy($client, $sid, $channels, $today, []);
+            }
+            return false;
+        }
+
+        // PV-Eingänge: zuerst Anlagen-Indikatoren, fehlende aus dem Tagesverlauf
         $ind = HoymilesClient::indicatorMap($client->getPvIndicators($sid));
         $values = [];
         $missing = [];
@@ -295,18 +532,24 @@ class HoymilesCloud extends IPSModule
             $u = $n ? ($ind["{$n}_pv_v"] ?? null) : null;
             $i = $n ? ($ind["{$n}_pv_i"] ?? null) : null;
             if ($n && !HoymilesClient::isPlaceholder($p) && !HoymilesClient::isPlaceholder($u)) {
-                $values[$c['ident']] = $fresh ? [(float) $p, (float) $u, $num($i)] : [0.0, 0.0, 0.0];
+                $values[$c['ident']] = [(float) $p, (float) $u, $num($i)];
             } else {
-                $missing[$c['micro']][] = $c['port'];
+                $missing[] = $c;
             }
         }
-        foreach ($missing as $microId => $ports) {
-            $mod = $client->getModuleValues($sid, (int) $microId, $ports, $maxAge);
-            foreach ($channels as $c) {
-                if ((int) $c['micro'] === (int) $microId && isset($mod[$c['port']])) {
-                    $m = $mod[$c['port']];
-                    $values[$c['ident']] = [(float) ($m['MODULE_POWER'] ?? 0), (float) ($m['MODULE_V'] ?? 0), (float) ($m['MODULE_I'] ?? 0)];
-                }
+
+        // Tagesverläufe nur holen, wenn Werte fehlen oder der Tagesertrag je Eingang fällig ist
+        $energyDue = time() - $this->ReadAttributeInteger('EnergyCalcAt') >= self::ENERGY_CALC_INTERVAL
+            || $this->ReadAttributeString('EnergyDate') !== date('Y-m-d');
+        $charts = [];
+        if ($missing || $energyDue) {
+            $charts = $this->loadCharts($client, $sid, $energyDue ? $channels : $missing);
+        }
+        foreach ($missing as $c) {
+            $chart = $charts[$c['micro']][$c['port']] ?? null;
+            if ($chart) {
+                $m = HoymilesClient::latestModuleValues($chart, $maxAge);
+                $values[$c['ident']] = [(float) ($m['MODULE_POWER'] ?? 0), (float) ($m['MODULE_V'] ?? 0), (float) ($m['MODULE_I'] ?? 0)];
             }
         }
         foreach ($values as $ident => [$p, $u, $i]) {
@@ -314,6 +557,549 @@ class HoymilesCloud extends IPSModule
             $this->setIfChanged($ident . '_Voltage', $u);
             $this->setIfChanged($ident . '_Current', $i);
         }
+        if ($energyDue) {
+            $this->updateChannelEnergy($client, $sid, $channels, $today, $charts);
+        }
+        return true;
+    }
+
+    /** @return array<int,array<int,array>> micro id => port => chart */
+    private function loadCharts(HoymilesClient $client, int $sid, array $channels, string $date = ''): array
+    {
+        $ports = [];
+        foreach ($channels as $c) {
+            $ports[(int) $c['micro']][] = (int) $c['port'];
+        }
+        $charts = [];
+        foreach ($ports as $microId => $list) {
+            $charts[$microId] = $client->getModuleCharts($sid, $microId, $list, $date);
+        }
+        return $charts;
+    }
+
+    /**
+     * Tagesertrag je PV-Eingang aus dem Tagesverlauf. Die Summe wird auf den Tagesertrag der
+     * Cloud abgeglichen, damit die Einzelwerte zusammen „Ertrag heute“ ergeben.
+     */
+    private function updateChannelEnergy(HoymilesClient $client, int $sid, array $channels, float $todayKWh, array $charts): void
+    {
+        $needed = [];
+        foreach ($channels as $c) {
+            if (!isset($charts[$c['micro']][$c['port']])) {
+                $needed[] = $c;
+            }
+        }
+        if ($needed) {
+            foreach ($this->loadCharts($client, $sid, $needed) as $microId => $byPort) {
+                foreach ($byPort as $port => $chart) {
+                    $charts[$microId][$port] = $chart;
+                }
+            }
+        }
+
+        $wh = [];
+        foreach ($channels as $c) {
+            $wh[$c['ident']] = HoymilesClient::chartEnergyWh($charts[$c['micro']][$c['port']] ?? ['x_axis' => [], 'series' => []]);
+        }
+        $sum = array_sum($wh);
+        $scale = 1.0;
+        if ($sum > 50 && $todayKWh > 0) {
+            $factor = $todayKWh * 1000 / $sum;
+            if ($factor > 0.7 && $factor < 1.3) { // nur plausible Abweichungen (Wechselrichter-Wirkungsgrad) ausgleichen
+                $scale = $factor;
+            }
+        }
+        foreach ($wh as $ident => $value) {
+            $this->setIfChanged($ident . '_Energy', round($value * $scale / 1000, 3));
+        }
+        $this->WriteAttributeInteger('EnergyCalcAt', time());
+        $this->WriteAttributeString('EnergyDate', date('Y-m-d'));
+    }
+
+    // ------------------------------------------------------------ Ersparnis
+
+    private function updateSavings(): void
+    {
+        if (!$this->ReadPropertyBoolean('Savings')) {
+            return;
+        }
+        $share = max(0, min(100, $this->ReadPropertyInteger('SelfConsumption'))) / 100;
+        $perKWh = $share * $this->ReadPropertyFloat('PricePurchase') + (1 - $share) * $this->ReadPropertyFloat('PriceFeedIn');
+        foreach (['Today', 'Month', 'Year', 'Total'] as $period) {
+            $kwh = (float) $this->GetValue('Energy' . $period);
+            $this->setIfChanged('Savings' . $period, round($kwh * $perKWh, 2));
+        }
+    }
+
+    // ------------------------------------------------------------- Firmware
+
+    private function checkFirmware(HoymilesClient $client, bool $fresh): void
+    {
+        if (!$fresh || time() - $this->ReadAttributeInteger('FirmwareCheckedAt') < self::FIRMWARE_CHECK_INTERVAL) {
+            return;
+        }
+        $this->WriteAttributeInteger('FirmwareCheckedAt', time());
+        $sid = $this->ReadAttributeInteger('ActiveStation');
+        try {
+            $tree = $client->getDeviceTree($sid);
+            $this->SendDebug('Firmware', json_encode($tree), 0);
+            $dtus = [];
+            $inverters = [];
+            $this->walkDeviceTree($tree, 0, $dtus, $inverters);
+
+            $fmt = function (array $d): string {
+                $sw = $d['soft_ver'] ?? $d['sys_soft_ver'] ?? ($d['extend_data']['soft_num'] ?? null);
+                $hw = $d['hard_ver'] ?? null;
+                $text = $sw !== null && $sw !== '' ? (string) $sw : '?';
+                if ($hw !== null && $hw !== '') {
+                    $text .= ' (HW ' . $hw . ')';
+                }
+                return $text;
+            };
+            $this->setIfChanged('FirmwareDTU', implode(', ', array_map($fmt, $dtus)));
+            $this->setIfChanged('FirmwareInverter', implode(', ', array_map(function (array $d) use ($fmt): string {
+                return (isset($d['sn']) ? $d['sn'] . ': ' : '') . $fmt($d);
+            }, $inverters)));
+
+            $upgrade = false;
+            foreach ($dtus as $dtu) {
+                if (empty($dtu['sn'])) {
+                    continue;
+                }
+                $status = $client->getFirmwareStatus($sid, (string) $dtu['sn']);
+                $this->SendDebug('Firmware', json_encode($status), 0);
+                if ((int) ($status['upgrade'] ?? 0) > 0) {
+                    $upgrade = true;
+                }
+                foreach ($status['list'] ?? [] as $entry) {
+                    if ((int) ($entry['is_upgrade'] ?? 0) > 0) {
+                        $upgrade = true;
+                    }
+                }
+            }
+            if ($upgrade && !$this->GetValue('FirmwareUpdate')) {
+                $this->notify($this->Translate('Hoymiles: firmware'), $this->Translate('A firmware update is available for the DTU or inverter.'), false);
+            }
+            $this->setIfChanged('FirmwareUpdate', $upgrade);
+        } catch (Throwable $e) {
+            // Firmware-Info ist Zusatz: Fehler nicht als Störung der Instanz werten
+            $this->SendDebug('Firmware', $this->Translate('Error') . ': ' . $e->getMessage(), 0);
+        }
+    }
+
+    private function walkDeviceTree(array $nodes, int $depth, array &$dtus, array &$inverters): void
+    {
+        foreach ($nodes as $node) {
+            if (!is_array($node)) {
+                continue;
+            }
+            $type = (int) ($node['dev_type'] ?? $node['type'] ?? 0);
+            $children = $node['children'] ?? $node['devices'] ?? [];
+            $isDtu = $type === 1 || ($type === 0 && $depth === 0 && !empty($children));
+            if (isset($node['sn']) || isset($node['soft_ver'])) {
+                if ($isDtu) {
+                    $dtus[] = $node;
+                } else {
+                    $inverters[] = $node;
+                }
+            }
+            if (is_array($children) && $children) {
+                $this->walkDeviceTree($children, $depth + 1, $dtus, $inverters);
+            }
+        }
+    }
+
+    // ------------------------------------------------------ Störungswarnungen
+
+    /**
+     * Prüft die Störungsbedingungen. Jede Bedingung ist wahr, falsch oder unbekannt (null);
+     * bei „unbekannt“ (z. B. nachts) bleibt ihr bisheriger Zustand erhalten.
+     */
+    private function evaluateAlarms(?bool $fresh): void
+    {
+        $now = time();
+        $since = json_decode($this->ReadAttributeString('AlarmSince'), true) ?: [];
+        $active = json_decode($this->ReadAttributeString('AlarmActive'), true) ?: [];
+        $delay = max(0, $this->ReadPropertyInteger('AlarmDelay')) * 60;
+        $conditions = []; // key => [bool|null, text, delay]
+
+        $day = $this->isDaylight();
+
+        // 1. Keine Daten, obwohl Tag
+        if ($this->ReadPropertyBoolean('AlarmOffline')) {
+            $dataTs = (int) $this->GetValue('DataTime');
+            $limit = max(10, $this->ReadPropertyInteger('AlarmOfflineMinutes')) * 60;
+            $stale = $dataTs > 0 && $now - $dataTs > $limit;
+            $state = null;
+            if ($fresh === true) {
+                $state = false;
+            } elseif ($day && $stale) {
+                $state = true;
+            } elseif (!$day && !isset($active['offline'])) {
+                $state = false;
+            }
+            $conditions['offline'] = [$state, sprintf($this->Translate('No data from the inverter since %s – DTU or inverter offline?'), $dataTs ? date('d.m. H:i', $dataTs) : '?'), 0];
+        }
+
+        // 2. Hell, aber kaum Leistung (nur mit Helligkeitssensor)
+        $sensor = $this->ReadPropertyInteger('BrightnessVariable');
+        $channels = $this->channels();
+        $sources = $this->inputSources();
+        $panels = array_values(array_filter($channels, static function (array $c) use ($sources): bool {
+            return ($sources[$c['ident']] ?? 'panel') === 'panel';
+        }));
+        $withStorage = count($panels) < count($channels);
+        if ($this->ReadPropertyBoolean('AlarmLowPower') && $sensor > 0 && IPS_VariableExists($sensor) && ($panels || !$channels)) {
+            $brightness = (float) GetValue($sensor);
+            if ($withStorage) {
+                // Speicher-Eingänge liefern je nach Akku-Steuerung – nur die Solarmodule zählen
+                $power = 0.0;
+                foreach ($panels as $c) {
+                    $power += (float) $this->GetValue($c['ident'] . '_Power');
+                }
+            } else {
+                $power = (float) $this->GetValue('Power');
+            }
+            $state = null;
+            if ($fresh === true) {
+                $state = $brightness >= $this->ReadPropertyFloat('AlarmBrightness') && $power < $this->ReadPropertyInteger('AlarmMinPower');
+            } elseif ($fresh === false && $brightness < $this->ReadPropertyFloat('AlarmBrightness')) {
+                $state = false;
+            }
+            $text = $withStorage
+                ? $this->Translate('Only %d W from the solar panels although it is bright (%s) – shading, snow or defect?')
+                : $this->Translate('Only %d W although it is bright (%s) – shading, snow or defect?');
+            $conditions['lowpower'] = [$state, sprintf($text, (int) round($power), $this->formatNumber($brightness)), $delay];
+        }
+
+        // 3. Ein PV-Eingang liefert deutlich weniger als die anderen (nur Eingänge mit Solarmodul)
+        if ($this->ReadPropertyBoolean('AlarmModules') && count($panels) >= 2) {
+            $powers = [];
+            foreach ($panels as $c) {
+                $powers[$c['ident']] = (float) $this->GetValue($c['ident'] . '_Power');
+            }
+            $deviation = max(10, min(95, $this->ReadPropertyInteger('AlarmModuleDeviation'))) / 100;
+            foreach ($panels as $c) {
+                $others = $powers;
+                unset($others[$c['ident']]);
+                $mean = array_sum($others) / count($others);
+                $state = null;
+                if ($fresh === true && $mean >= 30) {
+                    $state = $powers[$c['ident']] < $mean * (1 - $deviation);
+                }
+                $percent = $mean > 0 ? (int) round($powers[$c['ident']] / $mean * 100) : 0;
+                $conditions['module_' . $c['ident']] = [$state, sprintf($this->Translate('%s delivers only %d %% of the other inputs'), $c['name'], $percent), $delay];
+            }
+        }
+
+        // Zustände fortschreiben
+        $newActive = [];
+        foreach ($conditions as $key => [$state, $text, $wait]) {
+            if ($state === null) {
+                if (isset($active[$key])) {
+                    $newActive[$key] = $active[$key];
+                }
+                continue;
+            }
+            if (!$state) {
+                unset($since[$key]);
+                continue;
+            }
+            $since[$key] = $since[$key] ?? $now;
+            if ($now - $since[$key] >= $wait) {
+                $newActive[$key] = $text;
+            }
+        }
+        // abgeschaltete Prüfungen verwerfen
+        foreach (array_keys($since) as $key) {
+            if (!isset($conditions[$key])) {
+                unset($since[$key]);
+            }
+        }
+
+        $added = array_diff_key($newActive, $active);
+        $wasAlarm = (bool) $active;
+        foreach ($added as $text) {
+            $this->LogMessage($text, KL_WARNING);
+            $this->notify($this->Translate('Hoymiles: fault'), $text, true);
+        }
+        if ($wasAlarm && !$newActive) {
+            $this->LogMessage($this->Translate('Fault cleared'), KL_NOTIFY);
+            $this->notify($this->Translate('Hoymiles: OK'), $this->Translate('Fault cleared – the plant is working normally again.'), false);
+        }
+
+        $this->WriteAttributeString('AlarmSince', json_encode($since, JSON_FORCE_OBJECT));
+        $this->WriteAttributeString('AlarmActive', json_encode($newActive, JSON_FORCE_OBJECT));
+        $this->setIfChanged('Alarm', (bool) $newActive);
+        $this->setIfChanged('AlarmText', $newActive ? implode("\n", $newActive) : '');
+    }
+
+    /** Ist es hell genug, dass der Wechselrichter arbeiten müsste? (für die Offline-Warnung) */
+    private function isDaylight(): bool
+    {
+        $sensor = $this->ReadPropertyInteger('BrightnessVariable');
+        if ($sensor > 0 && IPS_VariableExists($sensor)) {
+            return (float) GetValue($sensor) >= $this->ReadPropertyFloat('BrightnessThreshold');
+        }
+        $location = $this->locationTimes();
+        if ($location !== null) {
+            [$rise, $set, $isDay] = $location;
+            if ($rise > 0 && $set > 0) {
+                // eine Stunde Abstand zu Sonnenauf- und -untergang, damit Dämmerung keinen Fehlalarm auslöst
+                return time() >= $rise + 3600 && time() <= $set - 3600;
+            }
+            if ($isDay !== null) {
+                return $isDay;
+            }
+        }
+        $hour = (int) date('G');
+        return $hour >= 10 && $hour < 16;
+    }
+
+    private function notify(string $title, string $text, bool $isAlarm): void
+    {
+        $target = $this->ReadPropertyInteger('NotifyInstance');
+        if ($target > 0 && IPS_InstanceExists($target)) {
+            try {
+                $moduleId = IPS_GetInstance($target)['ModuleInfo']['ModuleID'] ?? '';
+                if ($moduleId === self::WEBFRONT_GUID) {
+                    WFC_PushNotification($target, mb_substr($title, 0, 32), mb_substr($text, 0, 256), '', $this->InstanceID);
+                } elseif ($moduleId === self::TILE_VISU_GUID) {
+                    VISU_PostNotification($target, $title, $text, $isAlarm ? 'Warning' : 'Info', $this->InstanceID);
+                }
+            } catch (Throwable $e) {
+                $this->SendDebug('Notification', $e->getMessage(), 0);
+            }
+        }
+        $script = $this->ReadPropertyInteger('NotifyScript');
+        if ($script > 0 && IPS_ScriptExists($script)) {
+            IPS_RunScriptEx($script, ['INSTANCE' => $this->InstanceID, 'TITLE' => $title, 'TEXT' => $text, 'ALARM' => $isAlarm]);
+        }
+    }
+
+    // ------------------------------------------------------------ Nachtmodus
+
+    /**
+     * Legt den nächsten Abrufzeitpunkt fest. Nachts wird seltener abgefragt;
+     * bei bekanntem Sonnenaufgang wird pünktlich zum Sonnenaufgang wieder abgefragt.
+     */
+    private function scheduleNextUpdate(?bool $fresh): void
+    {
+        $normal = max(1, $this->ReadPropertyInteger('UpdateInterval')) * 60;
+        $night = false;
+        $source = '';
+        $wakeAt = 0;
+        if ($this->ReadPropertyBoolean('NightMode')) {
+            [$night, $source, $wakeAt] = $this->nightState($fresh);
+            if ($fresh === true) {
+                $night = false; // meldet noch Daten (z. B. Dämmerung) -> normal weiter abfragen
+            }
+        }
+
+        $interval = $normal;
+        if ($night) {
+            $interval = max($normal, $this->ReadPropertyInteger('NightInterval') * 60);
+            if ($wakeAt > time()) {
+                $interval = min($interval, max(60, $wakeAt - time()));
+            }
+        }
+        $this->SetTimerInterval('UpdateTimer', $interval * 1000);
+
+        if ((bool) $this->GetValue('NightActive') !== $night) {
+            $this->SendDebug('Night mode', ($night ? 'active' : 'ended') . ($source !== '' ? " (detected via $source)" : ''), 0);
+            $this->SetValue('NightActive', $night);
+        }
+        $this->SendDebug('Timer', 'next query in ' . round($interval / 60, 1) . ' minutes', 0);
+    }
+
+    /**
+     * Ist es Nacht? Reihenfolge: Helligkeitssensor, Sonnenstand (Location), Datenstand der Cloud.
+     * @return array{0:bool,1:string,2:int} [Nacht, Quelle, Zeitpunkt des Sonnenaufgangs oder 0]
+     */
+    private function nightState(?bool $fresh): array
+    {
+        $sensor = $this->ReadPropertyInteger('BrightnessVariable');
+        if ($sensor > 0 && IPS_VariableExists($sensor)) {
+            return [(float) GetValue($sensor) < $this->ReadPropertyFloat('BrightnessThreshold'), 'brightness sensor', 0];
+        }
+
+        $location = $this->locationTimes();
+        if ($location !== null) {
+            [$rise, $set, $isDay] = $location;
+            if ($rise > 0 && $set > 0) {
+                $now = time();
+                if ($now < $rise) {
+                    return [true, 'sun position', $rise];
+                }
+                if ($now > $set) {
+                    return [true, 'sun position', $rise + 86400]; // ungefähr morgen
+                }
+                return [false, 'sun position', 0];
+            }
+            if ($isDay !== null) {
+                return [!$isDay, 'sun position', 0];
+            }
+        }
+
+        if ($fresh === null) { // Abruf gescheitert: Zustand beibehalten
+            return [(bool) $this->GetValue('NightActive'), 'cloud data time', 0];
+        }
+        return [!$fresh, 'cloud data time', 0];
+    }
+
+    /** @return array{0:int,1:int,2:?bool}|null [Sonnenaufgang, Sonnenuntergang, Tag] aus der Location-Instanz */
+    private function locationTimes(): ?array
+    {
+        $locations = IPS_GetInstanceListByModuleID(self::LOCATION_GUID);
+        if (!$locations) {
+            return null;
+        }
+        $riseId = @IPS_GetObjectIDByIdent('Sunrise', $locations[0]);
+        $setId = @IPS_GetObjectIDByIdent('Sunset', $locations[0]);
+        $isDayId = @IPS_GetObjectIDByIdent('IsDay', $locations[0]);
+        return [
+            $riseId ? (int) GetValue($riseId) : 0,
+            $setId ? (int) GetValue($setId) : 0,
+            $isDayId ? (bool) GetValue($isDayId) : null,
+        ];
+    }
+
+    private function registerBrightnessSensor(): void
+    {
+        $old = $this->ReadAttributeInteger('BrightnessRegistered');
+        $new = $this->ReadPropertyInteger('BrightnessVariable');
+        if ($new > 0 && !IPS_VariableExists($new)) {
+            $new = 0;
+        }
+        if ($old === $new) {
+            return;
+        }
+        if ($old > 0) {
+            $this->UnregisterMessage($old, VM_UPDATE);
+            $this->UnregisterReference($old);
+        }
+        if ($new > 0) {
+            $this->RegisterMessage($new, VM_UPDATE);
+            $this->RegisterReference($new);
+        }
+        $this->WriteAttributeInteger('BrightnessRegistered', $new);
+    }
+
+    // ------------------------------------------------------ Verlauf nachladen
+
+    /** Lädt einen Tag und schreibt die Leistung je PV-Eingang ins Archiv. Liefert den DC-Ertrag in Wh. */
+    private function backfillDay(HoymilesClient $client, string $date): float
+    {
+        $ac = $this->archiveId();
+        $sid = $this->ReadAttributeInteger('ActiveStation');
+        $channels = $this->channels();
+        $charts = $this->loadCharts($client, $sid, $channels, $date);
+        $dayStart = (int) strtotime("$date 00:00:00");
+        $dayEnd = $dayStart + 86399;
+
+        $wh = 0.0;
+        $touched = [];
+        foreach ($channels as $c) {
+            $chart = $charts[$c['micro']][$c['port']] ?? null;
+            if (!$chart) {
+                continue;
+            }
+            $wh += HoymilesClient::chartEnergyWh($chart);
+            $vid = @$this->GetIDForIdent($c['ident'] . '_Power');
+            if (!$vid || !AC_GetLoggingStatus($ac, $vid) || $this->archiveHasData($ac, $vid, $dayStart, $dayEnd)) {
+                continue; // an diesem Tag schon Werte im Archiv -> nichts doppelt eintragen
+            }
+            $samples = HoymilesClient::chartPowerSamples($chart, $date);
+            if ($samples) {
+                AC_AddLoggedValues($ac, $vid, $samples);
+                $touched[] = $vid;
+            }
+        }
+        foreach ($touched as $vid) {
+            AC_ReAggregateVariable($ac, $vid);
+        }
+        $this->SendDebug('Backfill', sprintf('%s: %.0f Wh, %d inputs written', $date, $wh, count($touched)), 0);
+        return $wh;
+    }
+
+    /**
+     * Trägt für „Ertrag gesamt“ je Tag den Zählerstand um 23:59 ein. Ausgangspunkt ist der
+     * Zählerstand der Cloud zu Beginn des heutigen Tages; davon werden die nachgeladenen
+     * Tageserträge rückwärts abgezogen. Die Tageserträge aus dem Verlauf (Gleichstromseite)
+     * werden dabei mit dem Verhältnis zum Cloud-Tagesertrag auf die Wechselstromseite umgerechnet.
+     */
+    private function backfillCounter(array $energy): int
+    {
+        $ac = $this->archiveId();
+        $vid = @$this->GetIDForIdent('EnergyTotal');
+        if (!$ac || !$vid || !AC_GetLoggingStatus($ac, $vid)) {
+            return 0;
+        }
+        $counter = (float) $this->GetValue('EnergyTotal') - (float) $this->GetValue('EnergyToday');
+        if ($counter <= 0) {
+            return 0;
+        }
+        $scale = $this->acDcRatio();
+        krsort($energy); // neueste zuerst
+        $values = [];
+        foreach ($energy as $date => $wh) {
+            $ts = (int) strtotime("$date 23:59:00");
+            if (!$this->archiveHasData($ac, $vid, $ts - 86340, $ts + 59)) {
+                $values[] = ['TimeStamp' => $ts, 'Value' => round($counter, 3)];
+            }
+            $counter -= $wh * $scale / 1000;
+            if ($counter <= 0) {
+                break;
+            }
+        }
+        if ($values) {
+            AC_AddLoggedValues($ac, $vid, array_reverse($values));
+            AC_ReAggregateVariable($ac, $vid);
+        }
+        return count($values);
+    }
+
+    /** Verhältnis Cloud-Ertrag (Wechselstrom) zu Summe der PV-Eingänge (Gleichstrom), Standard 0,96. */
+    private function acDcRatio(): float
+    {
+        $dc = 0.0;
+        foreach ($this->channels() as $c) {
+            $dc += (float) $this->GetValue($c['ident'] . '_Energy');
+        }
+        $ac = (float) $this->GetValue('EnergyToday');
+        if ($dc > 0.05 && $ac > 0) {
+            $ratio = $ac / $dc;
+            if ($ratio > 0.7 && $ratio <= 1.0) {
+                return $ratio;
+            }
+        }
+        return 0.96;
+    }
+
+    private function archiveHasData(int $ac, int $vid, int $start, int $end): bool
+    {
+        return count(AC_GetLoggedValues($ac, $vid, $start, $end, 1)) > 0;
+    }
+
+    private function archiveId(): int
+    {
+        $archives = IPS_GetInstanceListByModuleID(self::ARCHIVE_GUID);
+        return $archives ? (int) $archives[0] : 0;
+    }
+
+    private function backfillStatusText(): string
+    {
+        $job = json_decode($this->ReadAttributeString('Backfill'), true);
+        if (!is_array($job)) {
+            return $this->Translate('No history loading running.');
+        }
+        $done = $job['total'] - count($job['pending']);
+        return sprintf($this->Translate('Loading history: %d of %d days'), $done, $job['total']);
+    }
+
+    private function updateBackfillForm(string $text = ''): void
+    {
+        $this->UpdateFormField('BackfillStatus', 'caption', $text !== '' ? $text : $this->backfillStatusText());
     }
 
     // -------------------------------------------------------------- Hilfen
@@ -348,9 +1134,52 @@ class HoymilesCloud extends IPSModule
         }
     }
 
+    /**
+     * Prüfwert, um geänderte Zugangsdaten zu erkennen. HMAC-SHA-256 mit zufälligem
+     * Salt je Instanz, damit sich aus dem gespeicherten Wert kein Passwort zurückrechnen lässt.
+     */
+    private function credentialFingerprint(): string
+    {
+        $salt = $this->ReadAttributeString('AuthSalt');
+        if ($salt === '') {
+            $salt = bin2hex(random_bytes(16));
+            $this->WriteAttributeString('AuthSalt', $salt);
+        }
+        $data = $this->ReadPropertyString('Username') . "\0" . $this->ReadPropertyString('Password') . "\0" . $this->ReadPropertyString('AuthMode');
+        return hash_hmac('sha256', $data, $salt);
+    }
+
     private function hasCredentials(): bool
     {
         return $this->ReadPropertyString('Username') !== '' && $this->ReadPropertyString('Password') !== '';
+    }
+
+    /** Variablen nicht belegter PV-Eingänge ausblenden (und wieder einblenden, wenn belegt). */
+    private function hideUnusedInputs(): void
+    {
+        $sources = $this->inputSources();
+        foreach ($this->channels() as $c) {
+            $hidden = ($sources[$c['ident']] ?? 'panel') === 'unused';
+            foreach (['_Power', '_Voltage', '_Current', '_Energy'] as $suffix) {
+                $vid = @$this->GetIDForIdent($c['ident'] . $suffix);
+                if ($vid && IPS_GetObject($vid)['ObjectIsHidden'] !== $hidden) {
+                    IPS_SetHidden($vid, $hidden);
+                }
+            }
+        }
+    }
+
+    /** @return array<string,string> Ident des Eingangs => 'panel' | 'storage' | 'unused' */
+    private function inputSources(): array
+    {
+        $map = [];
+        foreach (json_decode($this->ReadPropertyString('InputSources'), true) ?: [] as $row) {
+            if (isset($row['Ident'])) {
+                $source = (string) ($row['Source'] ?? 'panel');
+                $map[(string) $row['Ident']] = in_array($source, ['storage', 'unused'], true) ? $source : 'panel';
+            }
+        }
+        return $map;
     }
 
     private function channels(): array
@@ -360,8 +1189,8 @@ class HoymilesCloud extends IPSModule
 
     private function fail(int $status, Throwable $e): void
     {
-        $this->SendDebug('Fehler', $e->getMessage(), 0);
-        if ($this->GetStatus() !== $status) { // nur beim Wechsel ins Log, nicht alle 5 Minuten
+        $this->SendDebug('Error', $e->getMessage(), 0);
+        if ($this->GetStatus() !== $status) { // nur beim Wechsel ins Log, nicht bei jeder Abfrage
             $this->LogMessage($e->getMessage(), KL_WARNING);
         }
         $this->SetStatus($status);
@@ -371,11 +1200,12 @@ class HoymilesCloud extends IPSModule
     {
         $wanted = [];
         foreach ($channels as $k => $c) {
-            $pos = 20 + $k * 3;
-            $this->RegisterVariableFloat($c['ident'] . '_Power', $c['name'] . ' Leistung', '~Watt', $pos);
-            $this->RegisterVariableFloat($c['ident'] . '_Voltage', $c['name'] . ' Spannung', 'HOYM.Voltage', $pos + 1);
-            $this->RegisterVariableFloat($c['ident'] . '_Current', $c['name'] . ' Strom', 'HOYM.Current', $pos + 2);
-            array_push($wanted, $c['ident'] . '_Power', $c['ident'] . '_Voltage', $c['ident'] . '_Current');
+            $pos = 30 + $k * 4;
+            $this->RegisterVariableFloat($c['ident'] . '_Power', sprintf($this->Translate('%s power'), $c['name']), '~Watt', $pos);
+            $this->RegisterVariableFloat($c['ident'] . '_Voltage', sprintf($this->Translate('%s voltage'), $c['name']), 'HOYM.Voltage', $pos + 1);
+            $this->RegisterVariableFloat($c['ident'] . '_Current', sprintf($this->Translate('%s current'), $c['name']), 'HOYM.Current', $pos + 2);
+            $this->RegisterVariableFloat($c['ident'] . '_Energy', sprintf($this->Translate('%s yield today'), $c['name']), '~Electricity', $pos + 3);
+            array_push($wanted, $c['ident'] . '_Power', $c['ident'] . '_Voltage', $c['ident'] . '_Current', $c['ident'] . '_Energy');
         }
         foreach (IPS_GetChildrenIDs($this->InstanceID) as $child) {
             $ident = IPS_GetObject($child)['ObjectIdent'];
@@ -395,11 +1225,10 @@ class HoymilesCloud extends IPSModule
 
     private function enableArchive(array $idents): void
     {
-        $archives = IPS_GetInstanceListByModuleID(self::ARCHIVE_GUID);
-        if (!$archives) {
+        $ac = $this->archiveId();
+        if (!$ac) {
             return;
         }
-        $ac = $archives[0];
         $changed = false;
         foreach ($idents as $ident => $aggregation) {
             $vid = @$this->GetIDForIdent($ident);
@@ -421,16 +1250,16 @@ class HoymilesCloud extends IPSModule
     {
         $micros = json_decode($this->ReadAttributeString('Micros'), true) ?: [];
         if (!$micros) {
-            return 'Noch keine Anlage eingelesen.';
+            return $this->Translate('No plant read in yet.');
         }
         $parts = [];
         foreach ($micros as $m) {
-            $parts[] = trim($m['model'] . ' · SN ' . $m['sn'] . ' · ' . $m['ports'] . ' PV-Eingänge');
+            $parts[] = trim($m['model'] . ' · SN ' . $m['sn'] . ' · ' . sprintf($this->Translate('%d PV inputs'), $m['ports']));
         }
         $mode = $this->ReadAttributeString('TokenMode');
-        return 'Anlage: ' . $this->ReadAttributeString('StationName') . ' (' . $this->ReadAttributeInteger('ActiveStation') . ")\n"
-            . 'Wechselrichter: ' . implode("\n", $parts)
-            . ($mode !== '' ? "\nLogin-Variante: $mode" : '');
+        return $this->Translate('Plant') . ': ' . $this->ReadAttributeString('StationName') . ' (' . $this->ReadAttributeInteger('ActiveStation') . ")\n"
+            . $this->Translate('Inverter') . ': ' . implode("\n", $parts)
+            . ($mode !== '' ? "\n" . $this->Translate('Login variant') . ": $mode" : '');
     }
 
     private function updateSummary(): void
@@ -441,9 +1270,14 @@ class HoymilesCloud extends IPSModule
 
     private function setIfChanged(string $ident, $value): void
     {
-        if ($this->GetValue($ident) !== $value) {
+        if (@$this->GetIDForIdent($ident) && $this->GetValue($ident) !== $value) {
             $this->SetValue($ident, $value);
         }
+    }
+
+    private function formatNumber(float $value): string
+    {
+        return number_format($value, $value < 100 ? 1 : 0, ',', '.');
     }
 
     /** Wird nur von den SymconStubs (automatisierte Tests) für Timer benötigt. */
@@ -452,7 +1286,27 @@ class HoymilesCloud extends IPSModule
         return time();
     }
 
-    private function registerProfile(string $name, string $suffix, int $digits): void
+    private function registerProfiles(): void
+    {
+        $this->registerFloatProfile('HOYM.Voltage', ' V', 1);
+        $this->registerFloatProfile('HOYM.Current', ' A', 2);
+        $this->registerFloatProfile('HOYM.kg', ' kg', 1);
+        $this->registerFloatProfile('HOYM.Euro', ' €', 2);
+        $this->registerBoolProfile('HOYM.Producing', $this->Translate('Standby'), $this->Translate('Producing'), 'Moon', 'Sun');
+        $this->registerBoolProfile('HOYM.Night', $this->Translate('Day'), $this->Translate('Night'), 'Sun', 'Moon');
+        $this->registerBoolProfile('HOYM.Update', $this->Translate('up to date'), $this->Translate('update available'), 'Ok', 'Information');
+    }
+
+    private function registerBoolProfile(string $name, string $off, string $on, string $iconOff, string $iconOn): void
+    {
+        if (!IPS_VariableProfileExists($name)) {
+            IPS_CreateVariableProfile($name, VARIABLETYPE_BOOLEAN);
+        }
+        IPS_SetVariableProfileAssociation($name, 0, $off, $iconOff, -1);
+        IPS_SetVariableProfileAssociation($name, 1, $on, $iconOn, -1);
+    }
+
+    private function registerFloatProfile(string $name, string $suffix, int $digits): void
     {
         if (!IPS_VariableProfileExists($name)) {
             IPS_CreateVariableProfile($name, VARIABLETYPE_FLOAT);
