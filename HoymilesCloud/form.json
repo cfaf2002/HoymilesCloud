@@ -76,10 +76,20 @@
                 {
                     "type": "NumberSpinner",
                     "name": "BrightnessThreshold",
-                    "caption": "It is day from this brightness",
+                    "caption": "It is day from this brightness (used until a value has been learned)",
                     "digits": 1,
                     "minimum": 0,
                     "maximum": 200000
+                },
+                {
+                    "type": "CheckBox",
+                    "name": "BrightnessAuto",
+                    "caption": "Learn the threshold automatically (from the brightness when the inverter starts in the morning)"
+                },
+                {
+                    "type": "Label",
+                    "name": "LearnedInfo",
+                    "caption": "Nothing learned yet."
                 },
                 {
                     "type": "Label",
@@ -87,7 +97,7 @@
                 },
                 {
                     "type": "Label",
-                    "caption": "The threshold uses the unit of the sensor (e.g. lux). Tip: read the sensor value in the morning when the inverter starts working."
+                    "caption": "The threshold uses the unit of the sensor (e.g. lux). With learning switched on, the module notes each morning how bright it was when the inverter started producing (from the archive of the sensor, if it is logged) and uses 80 % of the typical value of the last days."
                 }
             ]
         },

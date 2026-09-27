@@ -56,6 +56,7 @@ class HoymilesCloud extends IPSModule
         $this->RegisterPropertyInteger('NightInterval', 30);
         $this->RegisterPropertyInteger('BrightnessVariable', 0);
         $this->RegisterPropertyFloat('BrightnessThreshold', 50.0);
+        $this->RegisterPropertyBoolean('BrightnessAuto', true);
 
         // Was hängt an welchem PV-Eingang? (Solarmodul oder Speicher wie Zendure)
         $this->RegisterPropertyString('InputSources', '[]');
@@ -107,6 +108,7 @@ class HoymilesCloud extends IPSModule
         $this->RegisterAttributeString('SwitchedOff', '{}'); // per Befehl ausgeschaltete Wechselrichter
         $this->RegisterAttributeString('TodayCurve', '[]');  // Tagesverlauf für die Kachel: [[Minute, W], …]
         $this->RegisterAttributeString('AlarmConfig', '');   // Prüfwert der Warn-Einstellungen
+        $this->RegisterAttributeString('BrightnessLearned', '{}'); // Datum => Helligkeit beim Produktionsstart
 
         $this->RegisterTimer('UpdateTimer', 0, 'HOYM_Update($_IPS[\'TARGET\']);');
         $this->RegisterTimer('BackfillTimer', 0, 'HOYM_BackfillStep($_IPS[\'TARGET\']);');
@@ -205,7 +207,7 @@ class HoymilesCloud extends IPSModule
                 return;
             }
             $brightness = (float) $Data[0];
-            if ($brightness >= $this->ReadPropertyFloat('BrightnessThreshold') && $this->GetValue('NightActive')) {
+            if ($brightness >= $this->brightnessThreshold() && $this->GetValue('NightActive')) {
                 $this->SendDebug('Night mode', "brightness $brightness reached the threshold – day mode, querying now", 0);
                 $this->SetValue('NightActive', false);
                 $this->SetTimerInterval('UpdateTimer', 1000);
@@ -229,6 +231,9 @@ class HoymilesCloud extends IPSModule
                 }
             }
             foreach ($element['items'] ?? [] as $k => $item) {
+                if (($item['name'] ?? '') === 'LearnedInfo') {
+                    $element['items'][$k]['caption'] = $this->learnedInfoText();
+                }
                 if (($item['name'] ?? '') === 'InputSources') {
                     $sources = $this->inputSources();
                     $rows = [];
@@ -718,6 +723,9 @@ class HoymilesCloud extends IPSModule
         if ($energyDue) {
             $this->updateChannelEnergy($client, $sid, $channels, $today, $charts);
         }
+        if ($power > 0) {
+            $this->learnBrightness();
+        }
         return true;
     }
 
@@ -1084,7 +1092,7 @@ class HoymilesCloud extends IPSModule
     {
         $sensor = $this->ReadPropertyInteger('BrightnessVariable');
         if ($sensor > 0 && IPS_VariableExists($sensor)) {
-            return (float) GetValue($sensor) >= $this->ReadPropertyFloat('BrightnessThreshold');
+            return (float) GetValue($sensor) >= $this->brightnessThreshold();
         }
         $location = $this->locationTimes();
         if ($location !== null) {
@@ -1165,7 +1173,7 @@ class HoymilesCloud extends IPSModule
     {
         $sensor = $this->ReadPropertyInteger('BrightnessVariable');
         if ($sensor > 0 && IPS_VariableExists($sensor)) {
-            return [(float) GetValue($sensor) < $this->ReadPropertyFloat('BrightnessThreshold'), 'brightness sensor', 0];
+            return [(float) GetValue($sensor) < $this->brightnessThreshold(), 'brightness sensor', 0];
         }
 
         $location = $this->locationTimes();
@@ -1190,6 +1198,95 @@ class HoymilesCloud extends IPSModule
             return [(bool) $this->GetValue('NightActive'), 'cloud data time', 0];
         }
         return [!$fresh, 'cloud data time', 0];
+    }
+
+    /**
+     * Schwelle „ab hier ist Tag“: gelernt aus den letzten Tagen (80 % des Medians der
+     * Helligkeit beim Produktionsstart) oder – solange noch nichts gelernt ist bzw. das
+     * Lernen ausgeschaltet ist – der eingetragene Wert.
+     */
+    private function brightnessThreshold(): float
+    {
+        if ($this->ReadPropertyBoolean('BrightnessAuto')) {
+            $values = array_values(json_decode($this->ReadAttributeString('BrightnessLearned'), true) ?: []);
+            if ($values) {
+                sort($values);
+                $n = count($values);
+                $median = $n % 2 ? $values[intdiv($n, 2)] : ($values[$n / 2 - 1] + $values[$n / 2]) / 2;
+                return round($median * 0.8, 1);
+            }
+        }
+        return $this->ReadPropertyFloat('BrightnessThreshold');
+    }
+
+    private function learnedInfoText(): string
+    {
+        $learned = json_decode($this->ReadAttributeString('BrightnessLearned'), true) ?: [];
+        if (!$this->ReadPropertyBoolean('BrightnessAuto')) {
+            return $this->Translate('Learning is switched off – the threshold entered above applies.');
+        }
+        if (!$learned) {
+            return $this->Translate('Nothing learned yet – the threshold entered above applies until the first morning with a brightness sensor.');
+        }
+        $days = [];
+        foreach ($learned as $date => $value) {
+            $days[] = date('d.m.', (int) strtotime($date)) . ': ' . $this->formatNumber((float) $value);
+        }
+        return sprintf($this->Translate('Learned threshold: %s (80 %% of the brightness at production start, last days: %s)'), $this->formatNumber($this->brightnessThreshold()), implode(' · ', $days));
+    }
+
+    /**
+     * Einmal am Tag merken, wie hell es war, als der Wechselrichter morgens zu produzieren begann.
+     * Den Startzeitpunkt liefert der Tagesverlauf der Cloud, die Helligkeit dazu das Archiv des
+     * Sensors (sonst der aktuelle Wert, falls der Start erst wenige Minuten her ist).
+     */
+    private function learnBrightness(): void
+    {
+        $sensor = $this->ReadPropertyInteger('BrightnessVariable');
+        if (!$this->ReadPropertyBoolean('BrightnessAuto') || $sensor <= 0 || !IPS_VariableExists($sensor)) {
+            return;
+        }
+        $learned = json_decode($this->ReadAttributeString('BrightnessLearned'), true) ?: [];
+        $today = date('Y-m-d');
+        if (isset($learned[$today])) {
+            return;
+        }
+        $startMinute = null;
+        foreach (json_decode($this->ReadAttributeString('TodayCurve'), true) ?: [] as [$minute, $watt]) {
+            if ($watt > 1) {
+                $startMinute = (int) $minute;
+                break;
+            }
+        }
+        if ($startMinute === null || $startMinute >= 12 * 60) {
+            return; // noch kein Verlauf oder kein Morgenstart erkennbar
+        }
+        $start = (int) strtotime("$today 00:00:00") + $startMinute * 60;
+
+        $value = null;
+        $ac = $this->archiveId();
+        if ($ac && AC_GetLoggingStatus($ac, $sensor)) {
+            $best = null;
+            foreach (AC_GetLoggedValues($ac, $sensor, $start - 1800, $start + 600, 0) as $row) {
+                $distance = abs((int) $row['TimeStamp'] - $start);
+                if ($best === null || $distance < $best) {
+                    $best = $distance;
+                    $value = (float) $row['Value'];
+                }
+            }
+        }
+        if ($value === null && time() - $start <= 20 * 60) {
+            $value = (float) GetValue($sensor);
+        }
+        if ($value === null || $value <= 0) {
+            $this->SendDebug('Night mode', 'brightness at production start not available today', 0);
+            return;
+        }
+        $learned[$today] = $value;
+        ksort($learned);
+        $learned = array_slice($learned, -10, null, true); // die letzten 10 Tage
+        $this->WriteAttributeString('BrightnessLearned', json_encode($learned, JSON_FORCE_OBJECT));
+        $this->SendDebug('Night mode', sprintf('production started at %s with brightness %s – threshold now %s', date('H:i', $start), $value, $this->brightnessThreshold()), 0);
     }
 
     /** @return array{0:int,1:int,2:?bool}|null [Sonnenaufgang, Sonnenuntergang, Tag] aus der Location-Instanz */

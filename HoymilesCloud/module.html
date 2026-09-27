@@ -45,27 +45,44 @@
     #bgArt {
         position: fixed; z-index: 0; pointer-events: none;
         top: calc(var(--top-safe, 48px) + 34px); right: 14px;
-        height: 104px; aspect-ratio: 12 / 7; max-width: 42%;
+        height: 116px; aspect-ratio: 12 / 7; max-width: 44%;
     }
-    #bgArt svg { width: 100%; height: 100%; overflow: visible; }
-    #bgArt .roof { fill: color-mix(in srgb, currentColor 7%, transparent); stroke: color-mix(in srgb, currentColor 18%, transparent); stroke-width: 1.2; }
-    #bgArt .wall { fill: color-mix(in srgb, currentColor 4%, transparent); stroke: color-mix(in srgb, currentColor 14%, transparent); stroke-width: 1.2; }
-    #bgArt .panel { fill: color-mix(in srgb, var(--storage) 30%, transparent); stroke: color-mix(in srgb, currentColor 30%, transparent); stroke-width: 0.8; }
-    #bgArt .window { fill: color-mix(in srgb, var(--solar) 18%, transparent); }
-    #bgArt .sunGlow { fill: url(#hmSunGlow); }
-    #bgArt .sunCore { fill: var(--solar); opacity: 0.85; }
-    #bgArt .ray { stroke: var(--solar); stroke-width: 2; stroke-linecap: round; opacity: 0.55; }
-    #bgArt .moon { fill: color-mix(in srgb, currentColor 30%, transparent); }
-    #bgArt .star { fill: color-mix(in srgb, currentColor 40%, transparent); }
+    #bgArt svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.18)); }
+    #bgArt .ground { fill: color-mix(in srgb, currentColor 12%, transparent); }
+    #bgArt .trunk { fill: #7a5a44; }
+    #bgArt .leaf { fill: #4caf50; }
+    #bgArt .leaf2 { fill: #3d9442; }
+    #bgArt .pv { fill: url(#hmPanel); stroke: #cfd8e6; stroke-width: 0.7; }
+    #bgArt .win rect { fill: url(#hmWindow); transition: fill 1.5s; }
+    #bgArt .box { fill: #eef1f5; stroke: #aab3c0; stroke-width: 0.8; }
+    #bgArt .bolt { fill: #3987e5; }
+    #bgArt .flow { fill: none; stroke: #f2a900; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 2 6; opacity: 0; }
+    #bgArt .ray { stroke: #ffb400; stroke-width: 2; stroke-linecap: round; opacity: 0.7; }
+    #bgArt .rays { transform-origin: 206px 26px; animation: hmTurn 40s linear infinite; }
+    #bgArt .sunPulse { transform-origin: 206px 26px; animation: hmGlow 4s ease-in-out infinite; }
+    #bgArt .cloud path { fill: color-mix(in srgb, #ffffff 85%, transparent); stroke: color-mix(in srgb, currentColor 12%, transparent); stroke-width: 0.8; }
+    #bgArt .cloud { animation: hmDrift 26s ease-in-out infinite alternate; }
+    #bgArt .moon { fill: #f3e9c6; stroke: color-mix(in srgb, currentColor 18%, transparent); stroke-width: 0.8; }
+    #bgArt .star { fill: color-mix(in srgb, #ffd966 75%, currentColor); animation: hmTwinkle 3s ease-in-out infinite; }
+    #bgArt .star.s2 { animation-delay: 1s; } #bgArt .star.s3 { animation-delay: 2s; }
+    #bgArt .shine { opacity: 0; }
     #bgArt .day, #bgArt .night { transition: opacity 1.5s; }
     #bgArt .night { opacity: 0; }
     #hm[data-status="night"] #bgArt .day { opacity: 0; }
     #hm[data-status="night"] #bgArt .night { opacity: 1; }
-    #hm[data-status="night"] #bgArt .window { fill: color-mix(in srgb, var(--solar) 45%, transparent); }
-    #bgArt .rays { transform-origin: 196px 30px; animation: hmTurn 40s linear infinite; }
+    #hm[data-status="night"] #bgArt .win rect { fill: url(#hmWindowLit); }
+    #hm[data-status="producing"] #bgArt .shine { animation: hmShine 6s ease-in-out infinite; }
+    #hm[data-status="producing"] #bgArt .flow { opacity: 0.95; animation: hmFlow 1.2s linear infinite; }
+    #hm[data-status="night"] #bgArt .pv { filter: brightness(0.7); }
     @keyframes hmTurn { to { transform: rotate(360deg); } }
+    @keyframes hmGlow { 50% { transform: scale(1.12); } }
+    @keyframes hmDrift { from { transform: translateX(-10px); } to { transform: translateX(14px); } }
+    @keyframes hmTwinkle { 50% { opacity: 0.25; } }
+    @keyframes hmShine { 0%, 55% { opacity: 0; transform: translateX(0); } 60% { opacity: 1; } 95% { opacity: 1; } 100% { opacity: 0; transform: translateX(150px); } }
+    @keyframes hmFlow { to { stroke-dashoffset: -16; } }
+    @media (prefers-reduced-motion: reduce) { #bgArt * { animation: none !important; } }
     @media (max-width: 420px), (max-height: 210px) { #bgArt { display: none; } }
-    @media (max-height: 400px) { #bgArt { height: 88px; top: calc(var(--top-safe, 48px) + 32px); } }
+    @media (max-height: 400px) { #bgArt { height: 100px; top: calc(var(--top-safe, 48px) + 34px); } }
 
     /* Kopfzeile */
     .head { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 30px; }
@@ -196,37 +213,72 @@
     <div id="bgArt" class="hidden" aria-hidden="true">
         <svg viewBox="0 0 240 140">
             <defs>
-                <radialGradient id="hmSunGlow"><stop offset="0" stop-color="#f2a900" stop-opacity="0.45"/><stop offset="1" stop-color="#f2a900" stop-opacity="0"/></radialGradient>
+                <radialGradient id="hmSunGlow"><stop offset="0" stop-color="#ffcf4a" stop-opacity="0.55"/><stop offset="1" stop-color="#ffcf4a" stop-opacity="0"/></radialGradient>
+                <radialGradient id="hmSunCore" cx="0.4" cy="0.35"><stop offset="0" stop-color="#fff3b0"/><stop offset="0.6" stop-color="#ffc233"/><stop offset="1" stop-color="#f29a00"/></radialGradient>
+                <linearGradient id="hmRoof" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#586174"/><stop offset="1" stop-color="#2c313d"/></linearGradient>
+                <linearGradient id="hmWall" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4f1ea"/><stop offset="1" stop-color="#d6d2c8"/></linearGradient>
+                <linearGradient id="hmWallSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c9c4b8"/><stop offset="1" stop-color="#b3ad9f"/></linearGradient>
+                <linearGradient id="hmPanel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a78e0"/><stop offset="0.55" stop-color="#1c4aa8"/><stop offset="1" stop-color="#10306e"/></linearGradient>
+                <linearGradient id="hmWindow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bcd8f5"/><stop offset="1" stop-color="#8fb6e3"/></linearGradient>
+                <linearGradient id="hmWindowLit" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe7a8"/><stop offset="1" stop-color="#ffb347"/></linearGradient>
+                <linearGradient id="hmShine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.75"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+                <clipPath id="hmPanelClip"><polygon points="91.3,49.8 159.4,49.8 172.6,75.0 72.6,75.0"/></clipPath>
             </defs>
+
+            <!-- Himmel: Sonne und Wolke am Tag, Mond und Sterne in der Nacht -->
             <g class="day">
-                <circle class="sunGlow" cx="196" cy="30" r="34"/>
+                <circle cx="206" cy="26" r="30" fill="url(#hmSunGlow)" class="sunPulse"/>
                 <g class="rays">
-                    <line class="ray" x1="196" y1="4" x2="196" y2="10"/><line class="ray" x1="196" y1="50" x2="196" y2="56"/>
-                    <line class="ray" x1="170" y1="30" x2="176" y2="30"/><line class="ray" x1="216" y1="30" x2="222" y2="30"/>
-                    <line class="ray" x1="178" y1="12" x2="182" y2="16"/><line class="ray" x1="210" y1="44" x2="214" y2="48"/>
-                    <line class="ray" x1="178" y1="48" x2="182" y2="44"/><line class="ray" x1="210" y1="16" x2="214" y2="12"/>
+                    <line class="ray" x1="206" y1="3" x2="206" y2="8"/><line class="ray" x1="206" y1="44" x2="206" y2="49"/>
+                    <line class="ray" x1="183" y1="26" x2="188" y2="26"/><line class="ray" x1="224" y1="26" x2="229" y2="26"/>
+                    <line class="ray" x1="190" y1="10" x2="193" y2="13"/><line class="ray" x1="219" y1="39" x2="222" y2="42"/>
+                    <line class="ray" x1="190" y1="42" x2="193" y2="39"/><line class="ray" x1="219" y1="13" x2="222" y2="10"/>
                 </g>
-                <circle class="sunCore" cx="196" cy="30" r="12"/>
+                <circle cx="206" cy="26" r="11" fill="url(#hmSunCore)"/>
+                <g class="cloud"><path transform="translate(-92 -14)" d="M150 30a7 7 0 0 1 12-5a9 9 0 0 1 16 4a6 6 0 0 1 1 12h-27a6 6 0 0 1-2-11z"/></g>
             </g>
             <g class="night">
-                <path class="moon" d="M205 16a16 16 0 1 0 12 24a13 13 0 1 1-12-24z"/>
-                <circle class="star" cx="160" cy="14" r="1.6"/><circle class="star" cx="228" cy="58" r="1.3"/>
-                <circle class="star" cx="176" cy="46" r="1.1"/><circle class="star" cx="140" cy="30" r="1.3"/>
+                <path class="moon" d="M214 12a15 15 0 1 0 11 23a12 12 0 1 1-11-23z"/>
+                <circle class="star s1" cx="170" cy="12" r="1.5"/><circle class="star s2" cx="232" cy="52" r="1.2"/>
+                <circle class="star s3" cx="186" cy="40" r="1"/><circle class="star s1" cx="150" cy="24" r="1.2"/>
+                <circle class="star s2" cx="196" cy="6" r="1"/>
             </g>
-            <polygon class="wall" points="46,138 46,92 176,92 176,138"/>
-            <rect class="window" x="126" y="106" width="18" height="16" rx="2"/>
-            <rect class="window" x="66" y="112" width="14" height="26" rx="2"/>
-            <polygon class="roof" points="30,96 72,52 150,52 192,96"/>
-            <g transform="translate(72 52) skewX(-43)">
-                <rect class="panel" x="10" y="8" width="24" height="15" rx="1.5"/>
-                <rect class="panel" x="37" y="8" width="24" height="15" rx="1.5"/>
-                <rect class="panel" x="10" y="26" width="24" height="15" rx="1.5"/>
-                <rect class="panel" x="37" y="26" width="24" height="15" rx="1.5"/>
+
+            <!-- Boden und Baum -->
+            <ellipse cx="124" cy="136" rx="104" ry="4.5" class="ground"/>
+            <rect x="24" y="112" width="4" height="22" rx="1.5" class="trunk"/>
+            <circle cx="26" cy="104" r="13" class="leaf"/><circle cx="18" cy="112" r="8" class="leaf2"/><circle cx="34" cy="111" r="9" class="leaf2"/>
+
+            <!-- Haus -->
+            <rect x="148" y="30" width="10" height="18" rx="1" fill="#6b6f78"/><rect x="146" y="28" width="14" height="4" rx="1" fill="#555a63"/>
+            <polygon points="182,80 196,82 196,134 182,134" fill="url(#hmWallSide)"/>
+            <rect x="58" y="80" width="124" height="54" fill="url(#hmWall)"/>
+            <polygon points="46,82 82,42 170,42 196,82" fill="url(#hmRoof)"/>
+            <polygon points="44,82 198,82 196,86 46,86" fill="#23272f" opacity="0.55"/>
+            <line x1="82" y1="42" x2="170" y2="42" stroke="#8a93a6" stroke-width="1.5" stroke-linecap="round"/>
+
+            <!-- Solarmodule mit Lichtreflex -->
+            <g class="panels">
+                <polygon class="pv" points="91.3,49.8 107.1,49.8 101.9,61.3 82.7,61.3"/>
+                <polygon class="pv" points="108.7,49.8 124.6,49.8 123.1,61.3 103.9,61.3"/>
+                <polygon class="pv" points="126.2,49.8 142.0,49.8 144.3,61.3 125.1,61.3"/>
+                <polygon class="pv" points="143.6,49.8 159.4,49.8 165.4,61.3 146.2,61.3"/>
+                <polygon class="pv" points="81.1,63.4 101.0,63.4 95.8,75.0 72.6,75.0"/>
+                <polygon class="pv" points="103.0,63.4 122.8,63.4 121.4,75.0 98.1,75.0"/>
+                <polygon class="pv" points="124.9,63.4 144.7,63.4 147.0,75.0 123.7,75.0"/>
+                <polygon class="pv" points="146.7,63.4 166.6,63.4 172.6,75.0 149.3,75.0"/>
+                <g clip-path="url(#hmPanelClip)"><g class="shine"><rect x="40" y="40" width="22" height="45" fill="url(#hmShine)" transform="skewX(-25)"/></g></g>
             </g>
-            <g transform="translate(150 52) skewX(43)">
-                <rect class="panel" x="-40" y="8" width="24" height="15" rx="1.5"/>
-                <rect class="panel" x="-40" y="26" width="24" height="15" rx="1.5"/>
-            </g>
+
+            <!-- Fenster und Tür -->
+            <rect x="72" y="100" width="16" height="34" rx="2" fill="#7a5a44"/><circle cx="84" cy="118" r="1.2" fill="#e8c27a"/>
+            <g class="win"><rect x="102" y="96" width="22" height="18" rx="2"/><rect x="138" y="96" width="22" height="18" rx="2"/></g>
+            <g stroke="#f4f1ea" stroke-width="1.4"><line x1="113" y1="96" x2="113" y2="114"/><line x1="102" y1="105" x2="124" y2="105"/><line x1="149" y1="96" x2="149" y2="114"/><line x1="138" y1="105" x2="160" y2="105"/></g>
+
+            <!-- Speicher an der Hauswand und Energiefluss vom Dach -->
+            <rect x="200" y="106" width="16" height="26" rx="3" class="box"/>
+            <path d="M209 111l-4 8h4l-2 7l6-9h-4l2-6z" class="bolt"/>
+            <path class="flow" d="M178 80 C 190 86, 206 90, 208 106"/>
         </svg>
     </div>
     <div class="head">
