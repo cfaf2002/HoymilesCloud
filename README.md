@@ -130,7 +130,8 @@ Gibt es mehrere Anlagen im Konto, kann nach dem Verbindungstest im Feld **Anlage
 | **Nachts seltener abfragen** | an | Schaltet den Nachtmodus ein oder aus. Ausgeschaltet wird rund um die Uhr im normalen Intervall abgefragt. |
 | **Abfrageintervall nachts** | 30 Minuten | Wie oft nachts nachgefragt wird (10–120 Minuten). |
 | **Helligkeitssensor (optional)** | – | Eine beliebige Helligkeits-Variable aus Symcon (z. B. Lux-Wert eines Außensensors). Wenn gewählt, entscheidet der Sensor, wann Nacht ist. |
-| **Ab dieser Helligkeit ist Tag** | 50 | Schwelle in der Einheit des Sensors. Liegt der Sensorwert darunter, gilt es als Nacht. |
+| **Ab dieser Helligkeit ist Tag** | 50 | Schwelle in der Einheit des Sensors. Liegt der Sensorwert darunter, gilt es als Nacht. Gilt, solange noch kein Wert gelernt ist (oder das Lernen ausgeschaltet ist). |
+| **Schwelle automatisch lernen** | an | Das Modul merkt sich jeden Morgen, wie hell es war, als der Wechselrichter zu produzieren begann, und nimmt 80 % des typischen Werts der letzten Tage als Schwelle. Darunter zeigt das Formular die gelernte Schwelle und die Werte der letzten Tage. |
 
 Wie der Nachtmodus arbeitet, steht in [Abschnitt 7](#7-so-kommen-die-werte-zustande).
 
@@ -298,7 +299,7 @@ Ohne Sonnenlicht schaltet der Wechselrichter ab und schickt nichts mehr an die C
 
 **Sicherheitsregel:** Solange der Wechselrichter noch frische Daten meldet, fragt das Modul immer im normalen Intervall ab – auch wenn Sensor oder Sonnenstand schon „Nacht“ sagen. So gehen in der Abenddämmerung keine Werte verloren.
 
-**Tipp für die Schwelle des Helligkeitssensors:** Morgens den Wert des Sensors ablesen, wenn „Produziert“ zum ersten Mal auf *Produziert* springt, und die Schwelle etwas darunter einstellen. Die Einheit ist die des Sensors (z. B. Lux).
+**Die Schwelle lernt das Modul selbst:** Jeden Morgen schaut es im Tagesverlauf der Cloud nach, wann der Wechselrichter zu produzieren begann, und liest aus dem Archiv des Helligkeitssensors, wie hell es zu diesem Zeitpunkt war. Aus den letzten (bis zu zehn) Tagen nimmt es den typischen Wert (Median) und davon 80 % – so wacht das Modul kurz vor dem Start des Wechselrichters auf. Am besten den Helligkeitssensor archivieren; ohne Archiv kann das Modul nur lernen, wenn der Start erst wenige Minuten zurückliegt. Bis zum ersten gelernten Wert gilt die eingetragene Schwelle.
 
 ## 8. Störungswarnungen
 
@@ -430,7 +431,7 @@ Das Modul bringt eine eigene Kachel für die **Kachel-Visualisierung** von Symco
 
 | Auswahl | Wirkung |
 |---------|---------|
-| **Illustration** (Standard) | Rechts neben der Kopfzahl ein gezeichnetes Haus mit Solarmodulen. Tagsüber scheint die Sonne, nachts stehen Mond und Sterne am Himmel und die Fenster leuchten. Erscheint nur in breiten Kacheln, in denen dafür Platz ist. |
+| **Illustration** (Standard) | Rechts neben der Kopfzahl ein gezeichnetes Haus mit Solarmodulen, Baum und Speicher an der Hauswand. Solange die Anlage produziert, scheint die Sonne, ein Lichtreflex wandert über die Module und Energie fließt vom Dach in den Speicher. Nachts stehen Mond und funkelnde Sterne am Himmel und die Fenster leuchten warm. Erscheint nur in breiten Kacheln, in denen dafür Platz ist. Wer Animationen in den Systemeinstellungen reduziert hat, bekommt ein ruhiges Bild. |
 | **Eigenes Bild** | Ein Foto (z. B. vom eigenen Haus oder den Solarmodulen) wird abgeblendet über die ganze Kachel gelegt. Dazu das Bild im Objektbaum als **Medienobjekt** (Typ Bild, höchstens 3 MB) hochladen und unter **Eigenes Bild** auswählen. Mit **Sichtbarkeit** (Standard 30 %) lässt sich einstellen, wie kräftig es erscheint – 20–40 % halten die Werte gut lesbar. |
 | **Keiner** | Schlichte Kachel ohne Hintergrund. |
 
@@ -643,6 +644,7 @@ phpunit --configuration phpunit.xml
 
 | Version | Build | Änderungen |
 |---------|-------|------------|
+| 1.0 | 11 | Schwelle des Helligkeitssensors wird automatisch aus der Helligkeit beim morgendlichen Produktionsstart gelernt; aufwendigere Haus-Illustration mit Lichtreflex auf den Modulen, Energiefluss in den Speicher, ziehender Wolke und funkelnden Sternen |
 | 1.0 | 10 | Kachel-Hintergrund: Illustration (Haus mit Solarmodulen, Tag/Nacht), eigenes Bild aus einem Medienobjekt oder keiner; Kachel-Einstellungen in eigenem Formularbereich |
 | 1.0 | 9 | Geänderte PV-Eingänge oder Warn-Einstellungen setzen die betroffenen Warnungen sofort zurück; Tagesverlauf bleibt bei Störungsmeldung sichtbar, sofern Platz ist |
 | 1.0 | 8 | Kachel: Platz oben für Titel und Vollbild-Knopf der Visualisierung, größerer Aktualisieren-Knopf, kompaktere Darstellung bei mittlerer Höhe; Tagesverlauf auch bei anderen Zeitformaten der Cloud; Eingangsvergleich erst ab 10 % der Nennleistung |
