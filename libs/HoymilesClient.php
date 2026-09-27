@@ -481,8 +481,9 @@ class HoymilesClient
             $label = $chart['x_axis'][$idx] ?? (end($chart['x_axis']) ?: null);
             $out['slot'] = $label;
             $fresh = true;
-            if ($label && preg_match('/^(\d{1,2}):(\d{2})$/', $label, $m)) {
-                $slotTs = mktime((int) $m[1], (int) $m[2], 0);
+            $minute = self::labelMinute($label);
+            if ($minute !== null) {
+                $slotTs = mktime(intdiv($minute, 60), $minute % 60, 0);
                 $fresh = $slotTs > time() || (time() - $slotTs) <= $maxAgeMinutes * 60;
             }
             $out[$type] = $fresh ? round((float) end($s['data']), $digits[$type]) : 0.0;
@@ -509,29 +510,71 @@ class HoymilesClient
     }
 
     /**
-     * Leistungswerte eines Tagesverlaufs mit Zeitstempel (für das Archiv).
+     * Leistungswerte eines Tagesverlaufs mit Zeitstempel (für Archiv und Kachel).
+     * Die Uhrzeit kommt aus den Beschriftungen der Zeitachse. Fehlen diese, wird bei
+     * bekanntem Zeitpunkt des letzten Werts ($lastTs) im 5-Minuten-Raster zurückgerechnet,
+     * bei einem vollständigen Tag (288 Werte) ab Mitternacht.
      * @return array<int,array{TimeStamp:int,Value:float}>
      */
-    public static function chartPowerSamples(array $chart, string $date): array
+    public static function chartPowerSamples(array $chart, string $date, ?int $lastTs = null): array
     {
         $out = [];
+        $dayStart = (int) strtotime("$date 00:00:00");
         foreach ($chart['series'] as $s) {
             if ($s['type'] !== 'MODULE_POWER') {
                 continue;
             }
+            $count = count($s['data']);
+            $labelled = false;
+            foreach ($chart['x_axis'] as $label) {
+                if (self::labelMinute($label) !== null) {
+                    $labelled = true;
+                    break;
+                }
+            }
             foreach ($s['data'] as $idx => $w) {
-                $label = $chart['x_axis'][$idx] ?? null;
-                if (!$label || !preg_match('/^(\d{1,2}):(\d{2})$/', $label) || !is_finite((float) $w)) {
+                if (!is_finite((float) $w)) {
                     continue;
                 }
-                $ts = strtotime("$date $label:00");
-                if ($ts !== false) {
-                    $out[] = ['TimeStamp' => $ts, 'Value' => round(max(0.0, (float) $w), 1)];
+                if ($labelled) {
+                    $minute = self::labelMinute($chart['x_axis'][$idx] ?? null);
+                    if ($minute === null) {
+                        continue;
+                    }
+                    $ts = $dayStart + $minute * 60;
+                } elseif ($lastTs) {
+                    $ts = $lastTs - ($count - 1 - $idx) * 300;
+                } elseif ($count === 288) {
+                    $ts = $dayStart + $idx * 300;
+                } else {
+                    return [];
                 }
+                $out[] = ['TimeStamp' => $ts, 'Value' => round(max(0.0, (float) $w), 1)];
             }
             break;
         }
         return $out;
+    }
+
+    /**
+     * Minute des Tages aus einer Achsenbeschriftung: "06:05", "06:05:00",
+     * "2026-09-27 06:05[:00]" oder Unix-Zeit (Sekunden bzw. Millisekunden).
+     */
+    public static function labelMinute($label): ?int
+    {
+        if (is_int($label) || is_float($label) || (is_string($label) && ctype_digit(trim($label)))) {
+            $ts = (int) $label;
+            if ($ts > 100000000000) {
+                $ts = intdiv($ts, 1000);
+            }
+            return $ts > 1000000000 ? (int) date('G', $ts) * 60 + (int) date('i', $ts) : null;
+        }
+        if (is_string($label) && preg_match('/(\d{1,2}):(\d{2})(?::\d{2})?\s*$/', $label, $m)) {
+            $h = (int) $m[1];
+            $i = (int) $m[2];
+            return $h <= 23 && $i <= 59 ? $h * 60 + $i : null;
+        }
+        return null;
     }
 
     /** Rasterlänge des Verlaufs in Minuten (aus den Uhrzeit-Beschriftungen, Standard 5). */
@@ -539,8 +582,9 @@ class HoymilesClient
     {
         $times = [];
         foreach ($xAxis as $label) {
-            if (is_string($label) && preg_match('/^(\d{1,2}):(\d{2})$/', $label, $m)) {
-                $times[] = (int) $m[1] * 60 + (int) $m[2];
+            $minute = self::labelMinute($label);
+            if ($minute !== null) {
+                $times[] = $minute;
             }
         }
         if (count($times) < 2) {
