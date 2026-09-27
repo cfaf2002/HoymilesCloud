@@ -103,6 +103,7 @@ class HoymilesCloud extends IPSModule
         $this->RegisterAttributeString('DtuMap', '{}');     // Seriennummer Wechselrichter => DTU
         $this->RegisterAttributeString('SwitchedOff', '{}'); // per Befehl ausgeschaltete Wechselrichter
         $this->RegisterAttributeString('TodayCurve', '[]');  // Tagesverlauf für die Kachel: [[Minute, W], …]
+        $this->RegisterAttributeString('AlarmConfig', '');   // Prüfwert der Warn-Einstellungen
 
         $this->RegisterTimer('UpdateTimer', 0, 'HOYM_Update($_IPS[\'TARGET\']);');
         $this->RegisterTimer('BackfillTimer', 0, 'HOYM_BackfillStep($_IPS[\'TARGET\']);');
@@ -166,6 +167,7 @@ class HoymilesCloud extends IPSModule
 
         $this->maintainChannelVariables($this->channels());
         $this->hideUnusedInputs();
+        $this->resetAlarmsOnConfigChange();
         $this->updateSummary();
 
         if (!$this->ReadPropertyBoolean('Active')) {
@@ -1019,6 +1021,42 @@ class HoymilesCloud extends IPSModule
         $this->WriteAttributeString('AlarmActive', json_encode($newActive, JSON_FORCE_OBJECT));
         $this->setIfChanged('Alarm', (bool) $newActive);
         $this->setIfChanged('AlarmText', $newActive ? implode("\n", $newActive) : '');
+    }
+
+    /**
+     * Wurden die PV-Eingänge oder die Warn-Einstellungen geändert, werden die davon abhängigen
+     * Warnungen verworfen und neu bewertet. Sonst bliebe z. B. eine Warnung aus dem Vergleich mit
+     * einem Speicher-Eingang bis zur nächsten Auswertung bei ausreichend Licht stehen.
+     */
+    private function resetAlarmsOnConfigChange(): void
+    {
+        $config = md5(json_encode([
+            $this->inputSources(),
+            $this->ReadPropertyBoolean('AlarmLowPower'),
+            $this->ReadPropertyFloat('AlarmBrightness'),
+            $this->ReadPropertyInteger('AlarmMinPower'),
+            $this->ReadPropertyBoolean('AlarmModules'),
+            $this->ReadPropertyInteger('AlarmModuleDeviation'),
+            $this->ReadPropertyInteger('BrightnessVariable'),
+        ]));
+        if ($config === $this->ReadAttributeString('AlarmConfig')) {
+            return;
+        }
+        $this->WriteAttributeString('AlarmConfig', $config);
+        $keep = static function (string $key): bool {
+            return $key !== 'lowpower' && strpos($key, 'module_') !== 0;
+        };
+        $active = json_decode($this->ReadAttributeString('AlarmActive'), true) ?: [];
+        $since = json_decode($this->ReadAttributeString('AlarmSince'), true) ?: [];
+        $newActive = array_filter($active, $keep, ARRAY_FILTER_USE_KEY);
+        if (count($newActive) === count($active)) {
+            return;
+        }
+        $this->WriteAttributeString('AlarmActive', json_encode($newActive, JSON_FORCE_OBJECT));
+        $this->WriteAttributeString('AlarmSince', json_encode(array_filter($since, $keep, ARRAY_FILTER_USE_KEY), JSON_FORCE_OBJECT));
+        $this->setIfChanged('Alarm', (bool) $newActive);
+        $this->setIfChanged('AlarmText', $newActive ? implode("\n", $newActive) : '');
+        $this->SendDebug('Fault', 'settings changed – warnings re-evaluated', 0);
     }
 
     /**

@@ -133,9 +133,11 @@
         .in { font-size: 11.5px; }
         .alarm { padding: 4px 8px; }
         .alarm span { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
-        #hm:has(.alarm:not(.hidden)) .curve { display: none !important; }
+        .curve { min-height: 36px; }
     }
     @media (max-height: 300px) { .curve { display: none !important; } }
+    /* sehr knapp mit Störungsmeldung: Tagesverlauf weglassen, damit nichts abgeschnitten wird */
+    @media (max-height: 350px) { #hm:has(.alarm:not(.hidden)) .curve { display: none !important; } }
     /* flache Kacheln: nur Kopfzahl, Störung zeigt die Statusanzeige */
     @media (max-height: 210px) {
         #hm { --top-safe: 40px; }
