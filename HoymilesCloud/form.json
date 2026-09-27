@@ -1,0 +1,102 @@
+{
+    "elements": [
+        {
+            "type": "Label",
+            "caption": "Zugang zur Hoymiles S-Miles Cloud (dieselben Daten wie in der App)"
+        },
+        {
+            "type": "ValidationTextBox",
+            "name": "Username",
+            "caption": "Benutzer / E-Mail",
+            "width": "400px"
+        },
+        {
+            "type": "PasswordTextBox",
+            "name": "Password",
+            "caption": "Passwort",
+            "width": "400px"
+        },
+        {
+            "type": "Select",
+            "name": "StationID",
+            "caption": "Anlage",
+            "width": "400px",
+            "options": [
+                { "caption": "automatisch (erste Anlage)", "value": 0 }
+            ]
+        },
+        {
+            "type": "NumberSpinner",
+            "name": "UpdateInterval",
+            "caption": "Abfrageintervall",
+            "suffix": "Minuten",
+            "minimum": 1,
+            "maximum": 60
+        },
+        {
+            "type": "CheckBox",
+            "name": "Archive",
+            "caption": "Leistung und Gesamtertrag archivieren (Gesamtertrag als Zähler)"
+        },
+        {
+            "type": "ExpansionPanel",
+            "caption": "Erweitert",
+            "items": [
+                {
+                    "type": "Select",
+                    "name": "AuthMode",
+                    "caption": "Login-Variante",
+                    "options": [
+                        { "caption": "automatisch", "value": "auto" },
+                        { "caption": "S-Miles Cloud (Web)", "value": "web_v3" },
+                        { "caption": "S-Miles Installer", "value": "installer_v3" },
+                        { "caption": "S-Miles Home", "value": "home_v3" },
+                        { "caption": "Legacy (v0)", "value": "legacy_v0" }
+                    ]
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "MaxAge",
+                    "caption": "Werte älter als … als 0 W werten (Nacht)",
+                    "suffix": "Minuten",
+                    "minimum": 5,
+                    "maximum": 240
+                }
+            ]
+        }
+    ],
+    "actions": [
+        {
+            "type": "Label",
+            "name": "DeviceInfo",
+            "caption": "Noch keine Anlage eingelesen."
+        },
+        {
+            "type": "RowLayout",
+            "items": [
+                {
+                    "type": "Button",
+                    "caption": "Verbindung testen",
+                    "onClick": "HOYM_TestConnection($id);"
+                },
+                {
+                    "type": "Button",
+                    "caption": "Anlage neu einlesen",
+                    "onClick": "HOYM_Discover($id);"
+                },
+                {
+                    "type": "Button",
+                    "caption": "Jetzt aktualisieren",
+                    "onClick": "HOYM_Update($id);"
+                }
+            ]
+        }
+    ],
+    "status": [
+        { "code": 102, "icon": "active", "caption": "Verbunden" },
+        { "code": 104, "icon": "inactive", "caption": "Bitte Zugangsdaten eintragen" },
+        { "code": 201, "icon": "error", "caption": "Login fehlgeschlagen – Zugangsdaten oder Login-Variante prüfen" },
+        { "code": 202, "icon": "error", "caption": "Keine Anlage bzw. kein Wechselrichter gefunden" },
+        { "code": 203, "icon": "error", "caption": "Fehler beim Abruf aus der Cloud (Details im Meldungsfenster)" }
+    ]
+}
