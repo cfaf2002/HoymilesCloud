@@ -26,6 +26,16 @@ class HoymilesCloud extends IPSModule
     private const ENERGY_CALC_INTERVAL = 900;   // Ertrag je PV-Eingang höchstens alle 15 Minuten neu berechnen
     private const FIRMWARE_CHECK_INTERVAL = 86400;
     private const BACKFILL_TICK_MS = 1500;
+    private const COMMAND_POLL_MS = 2000;
+    private const COMMAND_MAX_POLLS = 20;
+
+    // Steuerbefehle (Codes aus der S-Miles-Weboberfläche): Name => [Aktion, Gerätetyp]
+    private const COMMANDS = [
+        'reboot'     => [3, 3],   // Wechselrichter neu starten
+        'power_on'   => [6, 3],   // Wechselrichter einschalten
+        'power_off'  => [7, 3],   // Wechselrichter ausschalten
+        'dtu_reboot' => [1, 1],   // DTU neu starten
+    ];
 
     public function Create()
     {
@@ -86,9 +96,13 @@ class HoymilesCloud extends IPSModule
         $this->RegisterAttributeString('AlarmActive', '{}');
         $this->RegisterAttributeInteger('FirmwareCheckedAt', 0);
         $this->RegisterAttributeString('Backfill', '');
+        $this->RegisterAttributeString('Command', '');      // laufender Steuerbefehl
+        $this->RegisterAttributeString('DtuMap', '{}');     // Seriennummer Wechselrichter => DTU
+        $this->RegisterAttributeString('SwitchedOff', '{}'); // per Befehl ausgeschaltete Wechselrichter
 
         $this->RegisterTimer('UpdateTimer', 0, 'HOYM_Update($_IPS[\'TARGET\']);');
         $this->RegisterTimer('BackfillTimer', 0, 'HOYM_BackfillStep($_IPS[\'TARGET\']);');
+        $this->RegisterTimer('CommandTimer', 0, 'HOYM_CommandStep($_IPS[\'TARGET\']);');
 
         $this->registerProfiles();
     }
@@ -113,7 +127,7 @@ class HoymilesCloud extends IPSModule
         $this->RegisterVariableInteger('DataTime', $this->Translate('Cloud data time'), '~UnixTimestamp', 7);
         $this->RegisterVariableInteger('LastUpdate', $this->Translate('Last query'), '~UnixTimestamp', 8);
         $this->RegisterVariableBoolean('NightActive', $this->Translate('Night mode'), 'HOYM.Night', 9);
-        $this->RegisterVariableBoolean('Alarm', $this->Translate('Fault'), '~Alert', 10);
+        $this->RegisterVariableBoolean('Alarm', $this->Translate('Fault'), 'HOYM.Fault', 10);
         $this->RegisterVariableString('AlarmText', $this->Translate('Fault message'), '', 11);
 
         $savings = $this->ReadPropertyBoolean('Savings');
@@ -225,6 +239,19 @@ class HoymilesCloud extends IPSModule
                 case 'BackfillStatus':
                     $action['caption'] = $this->backfillStatusText();
                     break;
+            }
+            foreach ($action['items'] ?? [] as $k => $item) {
+                if (($item['name'] ?? '') === 'CommandTarget') {
+                    $options = [];
+                    foreach (json_decode($this->ReadAttributeString('Micros'), true) ?: [] as $m) {
+                        $options[] = ['caption' => trim($m['model'] . ' · SN ' . $m['sn']), 'value' => (string) $m['sn']];
+                    }
+                    $action['items'][$k]['options'] = $options ?: [['caption' => $this->Translate('No plant read in yet.'), 'value' => '']];
+                    $action['items'][$k]['value'] = $options[0]['value'] ?? '';
+                }
+                if (($item['name'] ?? '') === 'CommandStatus') {
+                    $action['items'][$k]['caption'] = $this->commandStatusText();
+                }
             }
         }
         unset($action);
@@ -405,6 +432,98 @@ class HoymilesCloud extends IPSModule
         $this->LogMessage($msg, KL_NOTIFY);
         $this->SendDebug('Backfill', $msg, 0);
         $this->updateBackfillForm($msg);
+    }
+
+    /**
+     * Steuerbefehl senden. $Command: reboot, power_on, power_off, dtu_reboot.
+     * $InverterSN: Seriennummer des Wechselrichters (leer = erster Wechselrichter).
+     */
+    public function SendCommand(string $Command, string $InverterSN): void
+    {
+        if (!isset(self::COMMANDS[$Command])) {
+            echo $this->Translate('Unknown command.');
+            return;
+        }
+        if ($this->ReadAttributeString('Command') !== '') {
+            echo $this->Translate('Another command is still running. Please wait a moment.');
+            return;
+        }
+        $micros = json_decode($this->ReadAttributeString('Micros'), true) ?: [];
+        if (!$micros || !$this->hasCredentials()) {
+            echo $this->Translate('Please set up the instance first (credentials, "Test connection").');
+            return;
+        }
+        $sn = $InverterSN !== '' ? $InverterSN : (string) $micros[0]['sn'];
+        if (!in_array($sn, array_column($micros, 'sn'), true)) {
+            echo $this->Translate('Unknown inverter.');
+            return;
+        }
+
+        $client = $this->client();
+        try {
+            $dtuSn = $this->dtuFor($client, $sn);
+            [$action, $devType] = self::COMMANDS[$Command];
+            $target = $devType === 1 ? $dtuSn : $sn;
+            $task = $client->sendCommand($action, $target, $devType, $dtuSn);
+            $this->WriteAttributeString('Command', json_encode(['task' => $task, 'command' => $Command, 'sn' => $sn, 'polls' => 0]));
+            $this->SetTimerInterval('CommandTimer', self::COMMAND_POLL_MS);
+            $this->SendDebug('Command', "$Command sent to $target (DTU $dtuSn), task $task", 0);
+            $this->updateCommandForm(sprintf($this->Translate('"%s" sent – waiting for confirmation from the DTU …'), $this->commandName($Command)));
+            echo sprintf($this->Translate('"%s" has been sent. The DTU confirms it within about 30 seconds; the result is shown in the form and in the message log.'), $this->commandName($Command));
+        } catch (Throwable $e) {
+            echo $this->Translate('Error') . ': ' . $e->getMessage();
+        } finally {
+            $this->saveClientState($client);
+        }
+    }
+
+    /** Ergebnis eines Steuerbefehls abfragen (Timer). */
+    public function CommandStep(): void
+    {
+        $job = json_decode($this->ReadAttributeString('Command'), true);
+        if (!is_array($job)) {
+            $this->SetTimerInterval('CommandTimer', 0);
+            return;
+        }
+        $client = $this->client();
+        $code = 2;
+        $error = '';
+        try {
+            $code = $client->commandStatus((string) $job['task']);
+        } catch (Throwable $e) {
+            $error = $e->getMessage();
+        }
+        $this->saveClientState($client);
+        $job['polls']++;
+        $name = $this->commandName($job['command']);
+
+        if ($code === 2 && $error === '' && $job['polls'] < self::COMMAND_MAX_POLLS) {
+            $this->WriteAttributeString('Command', json_encode($job));
+            return; // läuft noch
+        }
+
+        $this->SetTimerInterval('CommandTimer', 0);
+        $this->WriteAttributeString('Command', '');
+        if ($code === 0) {
+            $off = json_decode($this->ReadAttributeString('SwitchedOff'), true) ?: [];
+            if ($job['command'] === 'power_off') {
+                $off[$job['sn']] = time();
+            } elseif ($job['command'] === 'power_on') {
+                unset($off[$job['sn']]);
+            }
+            $this->WriteAttributeString('SwitchedOff', json_encode($off, JSON_FORCE_OBJECT));
+            $msg = sprintf($this->Translate('"%s" was carried out successfully.'), $name);
+            $this->LogMessage($msg, KL_NOTIFY);
+            if ($this->ReadPropertyBoolean('Active')) {
+                $this->SetTimerInterval('UpdateTimer', 5000); // Ergebnis gleich sichtbar machen
+            }
+        } else {
+            $reason = $error !== '' ? $error : ($code === 2 ? $this->Translate('no confirmation from the DTU (timeout)') : sprintf($this->Translate('error code %d'), $code));
+            $msg = sprintf($this->Translate('"%s" failed: %s'), $name, $reason);
+            $this->LogMessage($msg, KL_WARNING);
+        }
+        $this->SendDebug('Command', $msg, 0);
+        $this->updateCommandForm($msg);
     }
 
     // ---------------------------------------------------------------- Abruf
@@ -646,6 +765,7 @@ class HoymilesCloud extends IPSModule
             $dtus = [];
             $inverters = [];
             $this->walkDeviceTree($tree, 0, $dtus, $inverters);
+            $this->WriteAttributeString('DtuMap', json_encode($this->dtuMapFromTree($tree), JSON_FORCE_OBJECT));
 
             $fmt = function (array $d): string {
                 $sw = $d['soft_ver'] ?? $d['sys_soft_ver'] ?? ($d['extend_data']['soft_num'] ?? null);
@@ -724,6 +844,8 @@ class HoymilesCloud extends IPSModule
         $conditions = []; // key => [bool|null, text, delay]
 
         $day = $this->isDaylight();
+        // Per Befehl ausgeschaltet: „kaum Leistung“ und „Eingang schwächer“ sind dann gewollt
+        $switchedOff = (bool) (json_decode($this->ReadAttributeString('SwitchedOff'), true) ?: []);
 
         // 1. Keine Daten, obwohl Tag
         if ($this->ReadPropertyBoolean('AlarmOffline')) {
@@ -761,7 +883,9 @@ class HoymilesCloud extends IPSModule
                 $power = (float) $this->GetValue('Power');
             }
             $state = null;
-            if ($fresh === true) {
+            if ($switchedOff) {
+                $state = false;
+            } elseif ($fresh === true) {
                 $state = $brightness >= $this->ReadPropertyFloat('AlarmBrightness') && $power < $this->ReadPropertyInteger('AlarmMinPower');
             } elseif ($fresh === false && $brightness < $this->ReadPropertyFloat('AlarmBrightness')) {
                 $state = false;
@@ -784,7 +908,9 @@ class HoymilesCloud extends IPSModule
                 unset($others[$c['ident']]);
                 $mean = array_sum($others) / count($others);
                 $state = null;
-                if ($fresh === true && $mean >= 30) {
+                if ($switchedOff) {
+                    $state = false;
+                } elseif ($fresh === true && $mean >= 30) {
                     $state = $powers[$c['ident']] < $mean * (1 - $deviation);
                 }
                 $percent = $mean > 0 ? (int) round($powers[$c['ident']] / $mean * 100) : 0;
@@ -983,6 +1109,79 @@ class HoymilesCloud extends IPSModule
             $this->RegisterReference($new);
         }
         $this->WriteAttributeInteger('BrightnessRegistered', $new);
+    }
+
+    // ---------------------------------------------------------- Steuerbefehle
+
+    /** Seriennummer der DTU, an der ein Wechselrichter hängt (aus dem Geräte-Baum, zwischengespeichert). */
+    private function dtuFor(HoymilesClient $client, string $inverterSn): string
+    {
+        $map = json_decode($this->ReadAttributeString('DtuMap'), true) ?: [];
+        if (!empty($map[$inverterSn])) {
+            return (string) $map[$inverterSn];
+        }
+        $tree = $client->getDeviceTree($this->ReadAttributeInteger('ActiveStation'));
+        $map = $this->dtuMapFromTree($tree);
+        $this->WriteAttributeString('DtuMap', json_encode($map, JSON_FORCE_OBJECT));
+        if (empty($map[$inverterSn])) {
+            throw new HoymilesException($this->Translate('The DTU of this inverter could not be determined.'));
+        }
+        return (string) $map[$inverterSn];
+    }
+
+    /** @return array<string,string> Seriennummer Wechselrichter => Seriennummer DTU */
+    private function dtuMapFromTree(array $tree): array
+    {
+        $map = [];
+        $firstDtu = '';
+        foreach ($tree as $node) {
+            if (!is_array($node)) {
+                continue;
+            }
+            $dtuSn = (string) ($node['sn'] ?? '');
+            $firstDtu = $firstDtu ?: $dtuSn;
+            foreach ($node['children'] ?? $node['devices'] ?? [] as $child) {
+                if (is_array($child) && !empty($child['sn']) && $dtuSn !== '') {
+                    $map[(string) $child['sn']] = $dtuSn;
+                }
+            }
+        }
+        // Wechselrichter, die im Baum nicht auftauchen, der (einzigen) DTU zuordnen
+        foreach (json_decode($this->ReadAttributeString('Micros'), true) ?: [] as $m) {
+            if (!isset($map[$m['sn']]) && $firstDtu !== '') {
+                $map[$m['sn']] = $firstDtu;
+            }
+        }
+        return $map;
+    }
+
+    private function commandName(string $command): string
+    {
+        $names = [
+            'reboot'     => $this->Translate('Restart inverter'),
+            'power_on'   => $this->Translate('Switch inverter on'),
+            'power_off'  => $this->Translate('Switch inverter off'),
+            'dtu_reboot' => $this->Translate('Restart DTU'),
+        ];
+        return $names[$command] ?? $command;
+    }
+
+    private function commandStatusText(): string
+    {
+        $job = json_decode($this->ReadAttributeString('Command'), true);
+        if (is_array($job)) {
+            return sprintf($this->Translate('"%s" sent – waiting for confirmation from the DTU …'), $this->commandName($job['command']));
+        }
+        $off = json_decode($this->ReadAttributeString('SwitchedOff'), true) ?: [];
+        if ($off) {
+            return sprintf($this->Translate('Switched off by command: %s'), implode(', ', array_keys($off)));
+        }
+        return $this->Translate('No command running.');
+    }
+
+    private function updateCommandForm(string $text): void
+    {
+        $this->UpdateFormField('CommandStatus', 'caption', $text);
     }
 
     // ------------------------------------------------------ Verlauf nachladen
@@ -1295,15 +1494,16 @@ class HoymilesCloud extends IPSModule
         $this->registerBoolProfile('HOYM.Producing', $this->Translate('Standby'), $this->Translate('Producing'), 'Moon', 'Sun');
         $this->registerBoolProfile('HOYM.Night', $this->Translate('Day'), $this->Translate('Night'), 'Sun', 'Moon');
         $this->registerBoolProfile('HOYM.Update', $this->Translate('up to date'), $this->Translate('update available'), 'Ok', 'Information');
+        $this->registerBoolProfile('HOYM.Fault', $this->Translate('none'), $this->Translate('Fault'), 'Ok', 'Warning', 0x00A000, 0xFF0000);
     }
 
-    private function registerBoolProfile(string $name, string $off, string $on, string $iconOff, string $iconOn): void
+    private function registerBoolProfile(string $name, string $off, string $on, string $iconOff, string $iconOn, int $colorOff = -1, int $colorOn = -1): void
     {
         if (!IPS_VariableProfileExists($name)) {
             IPS_CreateVariableProfile($name, VARIABLETYPE_BOOLEAN);
         }
-        IPS_SetVariableProfileAssociation($name, 0, $off, $iconOff, -1);
-        IPS_SetVariableProfileAssociation($name, 1, $on, $iconOn, -1);
+        IPS_SetVariableProfileAssociation($name, 0, $off, $iconOff, $colorOff);
+        IPS_SetVariableProfileAssociation($name, 1, $on, $iconOn, $colorOn);
     }
 
     private function registerFloatProfile(string $name, string $suffix, int $digits): void

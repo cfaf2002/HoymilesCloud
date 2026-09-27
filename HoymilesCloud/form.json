@@ -349,6 +349,56 @@
         },
         {
             "type": "ExpansionPanel",
+            "caption": "Inverter control",
+            "items": [
+                {
+                    "type": "Label",
+                    "caption": "These commands are sent to the inverter or DTU via the Hoymiles cloud, just like in the S-Miles web portal. The DTU confirms them within about 30 seconds. While the inverter is switched off it produces no power – the warnings \"bright but little power\" and \"input weaker\" are suspended until it is switched on again via this form."
+                },
+                {
+                    "type": "Select",
+                    "name": "CommandTarget",
+                    "caption": "Inverter",
+                    "width": "400px",
+                    "options": []
+                },
+                {
+                    "type": "RowLayout",
+                    "items": [
+                        {
+                            "type": "Button",
+                            "caption": "Restart inverter",
+                            "onClick": "HOYM_SendCommand($id, 'reboot', $CommandTarget);",
+                            "confirm": "Really restart the inverter? It stops producing for about a minute."
+                        },
+                        {
+                            "type": "Button",
+                            "caption": "Switch inverter off",
+                            "onClick": "HOYM_SendCommand($id, 'power_off', $CommandTarget);",
+                            "confirm": "Really switch the inverter off? It stays off and produces no power until it is switched on again."
+                        },
+                        {
+                            "type": "Button",
+                            "caption": "Switch inverter on",
+                            "onClick": "HOYM_SendCommand($id, 'power_on', $CommandTarget);"
+                        },
+                        {
+                            "type": "Button",
+                            "caption": "Restart DTU",
+                            "onClick": "HOYM_SendCommand($id, 'dtu_reboot', $CommandTarget);",
+                            "confirm": "Really restart the DTU? No data reaches the cloud for a few minutes."
+                        }
+                    ]
+                },
+                {
+                    "type": "Label",
+                    "name": "CommandStatus",
+                    "caption": "No command running."
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
             "caption": "Load history",
             "items": [
                 {

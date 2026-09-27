@@ -120,7 +120,29 @@
             "The list is filled once the plant has been read in (\"Test connection\" or \"Read in plant again\").": "Die Liste füllt sich, sobald die Anlage eingelesen ist („Verbindung testen“ bzw. „Anlage neu einlesen“).",
             "Only %d W from the solar panels although it is bright (%s) – shading, snow or defect?": "Nur %d W von den Solarmodulen, obwohl es hell ist (%s) – Verschattung, Schnee oder Defekt?",
             "If a storage system (e.g. Zendure SolarFlow Hub) is connected to an input instead of a solar panel, select \"Storage\" here. Its output depends on the battery control, not on the sun. Select \"Not connected\" for unused inputs. Storage and unused inputs are left out of the fault warnings \"bright but little power\" and \"input weaker\"; the variables of unused inputs are hidden.": "Hängt an einem Eingang statt eines Solarmoduls ein Speicher (z. B. Zendure SolarFlow Hub), hier „Speicher“ wählen – seine Ausgabe richtet sich nach der Akku-Steuerung, nicht nach der Sonne. Freie Eingänge auf „nicht belegt“ stellen. Speicher- und freie Eingänge werden bei den Störungswarnungen „hell, aber kaum Leistung“ und „Eingang schwächer“ nicht berücksichtigt; die Variablen freier Eingänge werden ausgeblendet.",
-            "Not connected": "nicht belegt"
+            "Not connected": "nicht belegt",
+            "none": "keine",
+            "Inverter control": "Wechselrichter steuern",
+            "These commands are sent to the inverter or DTU via the Hoymiles cloud, just like in the S-Miles web portal. The DTU confirms them within about 30 seconds. While the inverter is switched off it produces no power – the warnings \"bright but little power\" and \"input weaker\" are suspended until it is switched on again via this form.": "Diese Befehle gehen über die Hoymiles-Cloud an Wechselrichter bzw. DTU – genau wie in der S-Miles-Weboberfläche. Die DTU bestätigt sie innerhalb von etwa 30 Sekunden. Solange der Wechselrichter ausgeschaltet ist, produziert er nichts – die Warnungen „hell, aber kaum Leistung“ und „Eingang schwächer“ ruhen dann, bis er hier wieder eingeschaltet wird.",
+            "Restart inverter": "Wechselrichter neu starten",
+            "Switch inverter off": "Wechselrichter ausschalten",
+            "Switch inverter on": "Wechselrichter einschalten",
+            "Restart DTU": "DTU neu starten",
+            "Really restart the inverter? It stops producing for about a minute.": "Wechselrichter wirklich neu starten? Er produziert dann etwa eine Minute lang nichts.",
+            "Really switch the inverter off? It stays off and produces no power until it is switched on again.": "Wechselrichter wirklich ausschalten? Er bleibt aus und produziert nichts, bis er wieder eingeschaltet wird.",
+            "Really restart the DTU? No data reaches the cloud for a few minutes.": "DTU wirklich neu starten? Einige Minuten lang kommen dann keine Daten in der Cloud an.",
+            "No command running.": "Es läuft kein Befehl.",
+            "Unknown command.": "Unbekannter Befehl.",
+            "Unknown inverter.": "Unbekannter Wechselrichter.",
+            "Another command is still running. Please wait a moment.": "Es läuft noch ein anderer Befehl. Bitte einen Moment warten.",
+            "\"%s\" sent – waiting for confirmation from the DTU …": "„%s“ gesendet – warte auf Bestätigung der DTU …",
+            "\"%s\" has been sent. The DTU confirms it within about 30 seconds; the result is shown in the form and in the message log.": "„%s“ wurde gesendet. Die DTU bestätigt den Befehl innerhalb von etwa 30 Sekunden; das Ergebnis steht im Formular und im Meldungsfenster.",
+            "\"%s\" was carried out successfully.": "„%s“ wurde erfolgreich ausgeführt.",
+            "\"%s\" failed: %s": "„%s“ fehlgeschlagen: %s",
+            "no confirmation from the DTU (timeout)": "keine Bestätigung der DTU (Zeitüberschreitung)",
+            "error code %d": "Fehlercode %d",
+            "The DTU of this inverter could not be determined.": "Die DTU dieses Wechselrichters konnte nicht ermittelt werden.",
+            "Switched off by command: %s": "Per Befehl ausgeschaltet: %s"
         }
     }
 }
