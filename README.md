@@ -180,12 +180,20 @@ Bleibt nur **ein** Solarmodul-Eingang übrig, gibt es nichts zu vergleichen – 
 | **Anteil des Ertrags, den du selbst verbrauchst** | 100 % | Welcher Teil des Solarstroms im Haus verbraucht wird. |
 | **Einspeisevergütung für den Rest** | 0,00 €/kWh | Was es für eingespeisten Strom gibt. |
 
+### Kachel
+
+| Feld | Standard | Bedeutung |
+|------|----------|-----------|
+| **Hintergrund** | Illustration | Illustration, eigenes Bild oder keiner (siehe [Abschnitt 12](#12-kachel-für-die-visualisierung)). |
+| **Eigenes Bild** | – | Medienobjekt mit dem Hintergrundbild. |
+| **Sichtbarkeit des eigenen Bildes** | 30 % | Wie kräftig das eigene Bild erscheint. |
+| **Nennleistung für den Ring** | 0 | 0 = aus dem Modellnamen des Wechselrichters. Z. B. 800 W eintragen, wenn der Wechselrichter auf 800 W begrenzt ist. |
+
 ### Erweitert
 
 | Feld | Standard | Bedeutung |
 |------|----------|-----------|
 | **Login-Variante** | automatisch | Welche Anmeldeart verwendet wird. „automatisch“ probiert die drei sicheren Varianten (Web, Installer-App, Home-App) nacheinander. Nur ändern, wenn die automatische Erkennung nicht klappt. |
-| **Nennleistung für den Ring in der Kachel** | 0 | 0 = aus dem Modellnamen des Wechselrichters. Z. B. 800 W eintragen, wenn der Wechselrichter auf 800 W begrenzt ist. |
 | **Werte älter als … als 0 W werten** | 20 Minuten | Sind die Daten der Cloud älter als diese Zeit (z. B. nachts, wenn der Wechselrichter schläft), werden Leistung, Spannung und Strom auf 0 gesetzt. |
 
 Die Variante **Legacy (v0)** ist absichtlich nicht Teil der automatischen Erkennung, weil sie das Passwort nur schwach geschützt überträgt. Sie sollte nur gewählt werden, wenn keine andere Variante funktioniert (siehe [Datensicherheit](#17-datensicherheit)).
@@ -418,7 +426,15 @@ Das Modul bringt eine eigene Kachel für die **Kachel-Visualisierung** von Symco
 
 **Die Kachel passt sich der Größe an:** Eine kleine Kachel zeigt nur Leistung und Ertrag heute, eine breite zusätzlich den Ring und die Ersparnis, eine große Kachel alles inklusive Tagesverlauf und PV-Eingängen. Farben und Schrift übernimmt sie von der Visualisierung – sie funktioniert in heller und dunkler Darstellung.
 
-**Einstellung:** Die Nennleistung für den Ring nimmt das Modul aus dem Modellnamen (HMS-1800-4T → 1.800 W). Bei einem auf 800 W begrenzten Balkonkraftwerk bietet es sich an, unter **Erweitert → Nennleistung für den Ring** 800 W einzutragen – dann ist der Ring bei voller Einspeisung auch voll.
+**Hintergrund:** Unter **Kachel → Hintergrund** gibt es drei Möglichkeiten:
+
+| Auswahl | Wirkung |
+|---------|---------|
+| **Illustration** (Standard) | Rechts neben der Kopfzahl ein gezeichnetes Haus mit Solarmodulen. Tagsüber scheint die Sonne, nachts stehen Mond und Sterne am Himmel und die Fenster leuchten. Erscheint nur in breiten Kacheln, in denen dafür Platz ist. |
+| **Eigenes Bild** | Ein Foto (z. B. vom eigenen Haus oder den Solarmodulen) wird abgeblendet über die ganze Kachel gelegt. Dazu das Bild im Objektbaum als **Medienobjekt** (Typ Bild, höchstens 3 MB) hochladen und unter **Eigenes Bild** auswählen. Mit **Sichtbarkeit** (Standard 30 %) lässt sich einstellen, wie kräftig es erscheint – 20–40 % halten die Werte gut lesbar. |
+| **Keiner** | Schlichte Kachel ohne Hintergrund. |
+
+**Einstellung:** Die Nennleistung für den Ring nimmt das Modul aus dem Modellnamen (HMS-1800-4T → 1.800 W). Bei einem auf 800 W begrenzten Balkonkraftwerk bietet es sich an, unter **Kachel → Nennleistung für den Ring** 800 W einzutragen – dann ist der Ring bei voller Einspeisung auch voll.
 
 Der Tagesverlauf wird alle 15 Minuten aus der Cloud neu berechnet und dazwischen mit dem aktuellen Wert ergänzt.
 
@@ -627,6 +643,7 @@ phpunit --configuration phpunit.xml
 
 | Version | Build | Änderungen |
 |---------|-------|------------|
+| 1.0 | 10 | Kachel-Hintergrund: Illustration (Haus mit Solarmodulen, Tag/Nacht), eigenes Bild aus einem Medienobjekt oder keiner; Kachel-Einstellungen in eigenem Formularbereich |
 | 1.0 | 9 | Geänderte PV-Eingänge oder Warn-Einstellungen setzen die betroffenen Warnungen sofort zurück; Tagesverlauf bleibt bei Störungsmeldung sichtbar, sofern Platz ist |
 | 1.0 | 8 | Kachel: Platz oben für Titel und Vollbild-Knopf der Visualisierung, größerer Aktualisieren-Knopf, kompaktere Darstellung bei mittlerer Höhe; Tagesverlauf auch bei anderen Zeitformaten der Cloud; Eingangsvergleich erst ab 10 % der Nennleistung |
 | 1.0 | 7 | Eigene Kachel für die Kachel-Visualisierung (Leistung mit Ring, Tagesverlauf, PV-Eingänge, Störung, Aktualisieren-Schaltfläche; passt sich Größe und hell/dunkel an) |
