@@ -35,6 +35,37 @@
         line-height: 1.25;
     }
     .hidden { display: none !important; }
+    #hm > * { position: relative; z-index: 1; }
+
+    /* Hintergrund: eigenes Bild (ganze Kachel, abgeblendet) oder Illustration (rechts neben der Kopfzahl) */
+    #bgImg {
+        position: fixed; inset: 0; z-index: 0; pointer-events: none;
+        background-size: cover; background-position: center; opacity: 0.3;
+    }
+    #bgArt {
+        position: fixed; z-index: 0; pointer-events: none;
+        top: calc(var(--top-safe, 48px) + 34px); right: 14px;
+        height: 104px; aspect-ratio: 12 / 7; max-width: 42%;
+    }
+    #bgArt svg { width: 100%; height: 100%; overflow: visible; }
+    #bgArt .roof { fill: color-mix(in srgb, currentColor 7%, transparent); stroke: color-mix(in srgb, currentColor 18%, transparent); stroke-width: 1.2; }
+    #bgArt .wall { fill: color-mix(in srgb, currentColor 4%, transparent); stroke: color-mix(in srgb, currentColor 14%, transparent); stroke-width: 1.2; }
+    #bgArt .panel { fill: color-mix(in srgb, var(--storage) 30%, transparent); stroke: color-mix(in srgb, currentColor 30%, transparent); stroke-width: 0.8; }
+    #bgArt .window { fill: color-mix(in srgb, var(--solar) 18%, transparent); }
+    #bgArt .sunGlow { fill: url(#hmSunGlow); }
+    #bgArt .sunCore { fill: var(--solar); opacity: 0.85; }
+    #bgArt .ray { stroke: var(--solar); stroke-width: 2; stroke-linecap: round; opacity: 0.55; }
+    #bgArt .moon { fill: color-mix(in srgb, currentColor 30%, transparent); }
+    #bgArt .star { fill: color-mix(in srgb, currentColor 40%, transparent); }
+    #bgArt .day, #bgArt .night { transition: opacity 1.5s; }
+    #bgArt .night { opacity: 0; }
+    #hm[data-status="night"] #bgArt .day { opacity: 0; }
+    #hm[data-status="night"] #bgArt .night { opacity: 1; }
+    #hm[data-status="night"] #bgArt .window { fill: color-mix(in srgb, var(--solar) 45%, transparent); }
+    #bgArt .rays { transform-origin: 196px 30px; animation: hmTurn 40s linear infinite; }
+    @keyframes hmTurn { to { transform: rotate(360deg); } }
+    @media (max-width: 420px), (max-height: 210px) { #bgArt { display: none; } }
+    @media (max-height: 400px) { #bgArt { height: 88px; top: calc(var(--top-safe, 48px) + 32px); } }
 
     /* Kopfzeile */
     .head { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 30px; }
@@ -160,7 +191,44 @@
     }
 </style>
 
-<div id="hm">
+<div id="hm" data-status="standby">
+    <div id="bgImg" class="hidden"></div>
+    <div id="bgArt" class="hidden" aria-hidden="true">
+        <svg viewBox="0 0 240 140">
+            <defs>
+                <radialGradient id="hmSunGlow"><stop offset="0" stop-color="#f2a900" stop-opacity="0.45"/><stop offset="1" stop-color="#f2a900" stop-opacity="0"/></radialGradient>
+            </defs>
+            <g class="day">
+                <circle class="sunGlow" cx="196" cy="30" r="34"/>
+                <g class="rays">
+                    <line class="ray" x1="196" y1="4" x2="196" y2="10"/><line class="ray" x1="196" y1="50" x2="196" y2="56"/>
+                    <line class="ray" x1="170" y1="30" x2="176" y2="30"/><line class="ray" x1="216" y1="30" x2="222" y2="30"/>
+                    <line class="ray" x1="178" y1="12" x2="182" y2="16"/><line class="ray" x1="210" y1="44" x2="214" y2="48"/>
+                    <line class="ray" x1="178" y1="48" x2="182" y2="44"/><line class="ray" x1="210" y1="16" x2="214" y2="12"/>
+                </g>
+                <circle class="sunCore" cx="196" cy="30" r="12"/>
+            </g>
+            <g class="night">
+                <path class="moon" d="M205 16a16 16 0 1 0 12 24a13 13 0 1 1-12-24z"/>
+                <circle class="star" cx="160" cy="14" r="1.6"/><circle class="star" cx="228" cy="58" r="1.3"/>
+                <circle class="star" cx="176" cy="46" r="1.1"/><circle class="star" cx="140" cy="30" r="1.3"/>
+            </g>
+            <polygon class="wall" points="46,138 46,92 176,92 176,138"/>
+            <rect class="window" x="126" y="106" width="18" height="16" rx="2"/>
+            <rect class="window" x="66" y="112" width="14" height="26" rx="2"/>
+            <polygon class="roof" points="30,96 72,52 150,52 192,96"/>
+            <g transform="translate(72 52) skewX(-43)">
+                <rect class="panel" x="10" y="8" width="24" height="15" rx="1.5"/>
+                <rect class="panel" x="37" y="8" width="24" height="15" rx="1.5"/>
+                <rect class="panel" x="10" y="26" width="24" height="15" rx="1.5"/>
+                <rect class="panel" x="37" y="26" width="24" height="15" rx="1.5"/>
+            </g>
+            <g transform="translate(150 52) skewX(43)">
+                <rect class="panel" x="-40" y="8" width="24" height="15" rx="1.5"/>
+                <rect class="panel" x="-40" y="26" width="24" height="15" rx="1.5"/>
+            </g>
+        </svg>
+    </div>
     <div class="head">
         <div class="title" id="title">Hoymiles</div>
         <span class="pill standby" id="pill"><span id="pillIcon"></span><span class="txt" id="pillText"></span></span>
@@ -244,9 +312,28 @@
         setTimeout(() => document.getElementById('refresh').classList.remove('spin'), 8000);
     }
 
+    function hmApplyBackground(bg) {
+        const img = document.getElementById('bgImg');
+        hmShow('bgArt', bg.mode === 'illustration');
+        hmShow('bgImg', bg.mode === 'image' && !!bg.image);
+        if (bg.mode === 'image' && bg.image) {
+            img.style.backgroundImage = 'url("' + bg.image + '")';
+            img.style.opacity = String(bg.opacity);
+        } else {
+            img.style.backgroundImage = '';
+        }
+    }
+
     function handleMessage(data) {
         const s = typeof data === 'string' ? JSON.parse(data) : data;
+        if (s.background) {
+            hmApplyBackground(s.background);
+        }
+        if (s.configured === undefined) {
+            return; // reine Hintergrund-Nachricht
+        }
         hmState = s;
+        document.getElementById('hm').dataset.status = s.status;
         const L = s.labels;
         document.getElementById('refresh').classList.remove('spin');
         document.getElementById('refresh').title = L.refresh;

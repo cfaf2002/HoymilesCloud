@@ -156,7 +156,15 @@
             "%d min ago": "vor %d Min.",
             "%s % of %p W": "%s % von %p W",
             "No curve for today yet": "Noch kein Tagesverlauf",
-            "Storage": "Speicher"
+            "Storage": "Speicher",
+            "Tile": "Kachel",
+            "Background": "Hintergrund",
+            "Illustration (house with solar panels, day and night)": "Illustration (Haus mit Solarmodulen, Tag und Nacht)",
+            "Own image": "Eigenes Bild",
+            "None": "Keiner",
+            "Own image (media object)": "Eigenes Bild (Medienobjekt)",
+            "Visibility of the own image": "Sichtbarkeit des eigenen Bildes",
+            "The own image is shown faded over the whole tile so that values remain readable (recommended 20–40 %). Upload a photo of your house or solar panels in the object tree as a media object (image, max. 3 MB) and select it here.": "Das eigene Bild wird abgeblendet über die ganze Kachel gelegt, damit die Werte lesbar bleiben (empfohlen 20–40 %). Ein Foto vom Haus oder den Solarmodulen im Objektbaum als Medienobjekt (Bild, max. 3 MB) hochladen und hier auswählen."
         }
     }
 }

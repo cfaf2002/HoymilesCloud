@@ -276,6 +276,57 @@
         },
         {
             "type": "ExpansionPanel",
+            "caption": "Tile",
+            "items": [
+                {
+                    "type": "Select",
+                    "name": "TileBackground",
+                    "caption": "Background",
+                    "options": [
+                        {
+                            "caption": "Illustration (house with solar panels, day and night)",
+                            "value": "illustration"
+                        },
+                        {
+                            "caption": "Own image",
+                            "value": "image"
+                        },
+                        {
+                            "caption": "None",
+                            "value": "none"
+                        }
+                    ]
+                },
+                {
+                    "type": "SelectMedia",
+                    "name": "TileImage",
+                    "caption": "Own image (media object)",
+                    "width": "400px"
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "TileImageOpacity",
+                    "caption": "Visibility of the own image",
+                    "suffix": "%",
+                    "minimum": 5,
+                    "maximum": 100
+                },
+                {
+                    "type": "Label",
+                    "caption": "The own image is shown faded over the whole tile so that values remain readable (recommended 20–40 %). Upload a photo of your house or solar panels in the object tree as a media object (image, max. 3 MB) and select it here."
+                },
+                {
+                    "type": "NumberSpinner",
+                    "name": "TileMaxPower",
+                    "caption": "Rated power for the ring in the tile (0 = from the inverter model)",
+                    "suffix": "W",
+                    "minimum": 0,
+                    "maximum": 100000
+                }
+            ]
+        },
+        {
+            "type": "ExpansionPanel",
             "caption": "Advanced",
             "items": [
                 {
@@ -312,14 +363,6 @@
                     "suffix": "minutes",
                     "minimum": 5,
                     "maximum": 240
-                },
-                {
-                    "type": "NumberSpinner",
-                    "name": "TileMaxPower",
-                    "caption": "Rated power for the ring in the tile (0 = from the inverter model)",
-                    "suffix": "W",
-                    "minimum": 0,
-                    "maximum": 100000
                 }
             ]
         }

@@ -80,6 +80,9 @@ class HoymilesCloud extends IPSModule
 
         // Kachel
         $this->RegisterPropertyInteger('TileMaxPower', 0); // 0 = aus dem Wechselrichter-Modell
+        $this->RegisterPropertyString('TileBackground', 'illustration'); // illustration | image | none
+        $this->RegisterPropertyInteger('TileImage', 0);                 // Medienobjekt (Bild)
+        $this->RegisterPropertyInteger('TileImageOpacity', 30);          // %
 
         $this->RegisterAttributeString('Token', '');
         $this->RegisterAttributeInteger('TokenExpires', 0);
@@ -183,6 +186,7 @@ class HoymilesCloud extends IPSModule
         }
         // Erster Abruf kurz nach dem Übernehmen, damit das Speichern nicht blockiert
         $this->SetTimerInterval('UpdateTimer', 2000);
+        $this->UpdateVisualizationValue(json_encode(['background' => $this->tileBackground()]));
         $this->pushTile();
         if ($this->ReadAttributeString('Backfill') !== '') {
             $this->SetTimerInterval('BackfillTimer', self::BACKFILL_TICK_MS);
@@ -330,7 +334,8 @@ class HoymilesCloud extends IPSModule
     public function GetVisualizationTile()
     {
         return file_get_contents(__DIR__ . '/module.html')
-            . '<script>handleMessage(' . json_encode($this->tileMessage()) . ');</script>';
+            . '<script>handleMessage(' . json_encode(json_encode(['background' => $this->tileBackground()])) . ');'
+            . 'handleMessage(' . json_encode($this->tileMessage()) . ');</script>';
     }
 
     /** Button „Verbindung testen“: frischer Login und Liste der Anlagen. */
@@ -1223,9 +1228,36 @@ class HoymilesCloud extends IPSModule
             $this->RegisterReference($new);
         }
         $this->WriteAttributeInteger('BrightnessRegistered', $new);
+        $image = $this->ReadPropertyInteger('TileImage');
+        if ($image > 0 && @IPS_MediaExists($image)) {
+            $this->RegisterReference($image);
+        }
     }
 
     // ---------------------------------------------------------------- Kachel
+
+    /** Hintergrund der Kachel: eingebaute Illustration, eigenes Bild (Medienobjekt) oder keiner. */
+    private function tileBackground(): array
+    {
+        $mode = $this->ReadPropertyString('TileBackground');
+        $opacity = max(5, min(100, $this->ReadPropertyInteger('TileImageOpacity'))) / 100;
+        if ($mode !== 'image') {
+            return ['mode' => $mode === 'none' ? 'none' : 'illustration', 'image' => null, 'opacity' => $opacity];
+        }
+        $media = $this->ReadPropertyInteger('TileImage');
+        if ($media <= 0 || !IPS_MediaExists($media)) {
+            return ['mode' => 'illustration', 'image' => null, 'opacity' => $opacity];
+        }
+        $content = (string) IPS_GetMediaContent($media); // Base64
+        if ($content === '' || strlen($content) > 4 * 1024 * 1024) {
+            $this->SendDebug('Tile', 'background image missing or larger than 3 MB – using the illustration', 0);
+            return ['mode' => 'illustration', 'image' => null, 'opacity' => $opacity];
+        }
+        $types = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif', 'svg' => 'image/svg+xml'];
+        $ext = strtolower(pathinfo((string) IPS_GetMedia($media)['MediaFile'], PATHINFO_EXTENSION));
+        $mime = $types[$ext] ?? 'image/jpeg';
+        return ['mode' => 'image', 'image' => "data:$mime;base64,$content", 'opacity' => $opacity];
+    }
 
     private function pushTile(): void
     {
