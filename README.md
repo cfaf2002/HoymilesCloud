@@ -423,7 +423,9 @@ Das Modul bringt eine eigene Kachel für die **Kachel-Visualisierung** von Symco
 - **Ertrag heute** und **heute gespart** (wenn die Ersparnis eingeschaltet ist).
 - **Tagesverlauf** der Leistung als Fläche. Mit dem Finger oder der Maus lässt sich jeder Zeitpunkt antippen, dann erscheinen Uhrzeit und Leistung.
 - **Die PV-Eingänge** als Balken mit Leistung und Tagesertrag. Speicher-Eingänge sind blau und mit Batterie-Symbol gekennzeichnet, ein auffällig schwacher Eingang wird rot hervorgehoben, freie Eingänge werden nicht angezeigt. Fährt man mit der Maus darüber, erscheinen zusätzlich Spannung und Strom.
-- **Fußzeile:** Ertrag des Monats und des Jahres sowie das Alter der Daten („Daten vor 3 Min.“).
+- **Fußzeile:** Ertrag des Monats und des Jahres sowie das Alter der Daten („Daten vor 3 Min.“). Wer mit der Maus darauf zeigt (oder am Handy lange drückt), sieht die Uhrzeit der Cloud-Daten, des letzten und des nächsten Abrufs.
+- **Aktualisierung:** Nach jedem Abruf schickt das Modul den neuen Stand an die Kachel. Wird die Kachel wieder sichtbar (App aus dem Hintergrund geholt, Seite gewechselt, Kachel geöffnet), holt sie sich zusätzlich den aktuellen Stand vom Modul. So gehen keine Aktualisierungen verloren, während die App im Hintergrund war. Dabei wird nicht die Cloud abgefragt, sondern nur das Modul.
+- **Hinweis zum Alter der Daten:** „Daten vor X Min.“ ist das Alter der Werte **in der Cloud**, nicht der Zeitpunkt des Abrufs. Die DTU schickt ihre Werte nur alle paar Minuten an die Cloud. Deshalb kann dort auch direkt nach einem Abruf „vor 5 Min.“ stehen.
 
 **Die Kachel passt sich der Größe an:** Eine kleine Kachel zeigt nur Leistung und Ertrag heute, eine breite zusätzlich den Ring und die Ersparnis, eine große Kachel alles inklusive Tagesverlauf und PV-Eingängen. Farben und Schrift übernimmt sie von der Visualisierung – sie funktioniert in heller und dunkler Darstellung.
 
@@ -645,6 +647,7 @@ phpunit --configuration phpunit.xml
 | Version | Build | Änderungen |
 |---------|-------|------------|
 | 1.0 | 11 | Schwelle des Helligkeitssensors wird automatisch aus der Helligkeit beim morgendlichen Produktionsstart gelernt; aufwendigere Haus-Illustration mit Lichtreflex auf den Modulen, Energiefluss in den Speicher, ziehender Wolke und funkelnden Sternen |
+| 1.0 | 12 | Kachel holt sich den aktuellen Stand, sobald sie wieder sichtbar wird (verpasste Aktualisierungen, z. B. wenn die App im Hintergrund war); Uhrzeit von Cloud-Daten, letztem und nächstem Abruf in der Fußzeile |
 | 1.0 | 10 | Kachel-Hintergrund: Illustration (Haus mit Solarmodulen, Tag/Nacht), eigenes Bild aus einem Medienobjekt oder keiner; Kachel-Einstellungen in eigenem Formularbereich |
 | 1.0 | 9 | Geänderte PV-Eingänge oder Warn-Einstellungen setzen die betroffenen Warnungen sofort zurück; Tagesverlauf bleibt bei Störungsmeldung sichtbar, sofern Platz ist |
 | 1.0 | 8 | Kachel: Platz oben für Titel und Vollbild-Knopf der Visualisierung, größerer Aktualisieren-Knopf, kompaktere Darstellung bei mittlerer Höhe; Tagesverlauf auch bei anderen Zeitformaten der Cloud; Eingangsvergleich erst ab 10 % der Nennleistung |
