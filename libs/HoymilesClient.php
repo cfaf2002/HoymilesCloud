@@ -495,13 +495,16 @@ class HoymilesClient
     }
 
     /**
-     * Der erste Wert eines Tagesverlaufs (Mitternacht) ist oft ein Überbleibsel vom Vortag:
-     * ein einzelner hoher Wert, danach bis zum Sonnenaufgang nur Nullen oder kleine Werte
-     * (z. B. Ruhestrom eines Speichers). Er wird ignoriert, wenn die folgenden 30 Minuten
-     * weniger als ein Fünftel davon zeigen. Echte Leistung um Mitternacht (z. B. aus einem
-     * Speicher) hat auch danach ähnliche Werte und bleibt erhalten.
+     * Der erste Wert eines Tagesverlaufs (Mitternacht) ist oft ein Überbleibsel vom Vortag.
+     * Er wird ignoriert, wenn
+     *  - er kurz nach Mitternacht liegt und der nächste Wert erst mehr als 30 Minuten später
+     *    kommt (einzelner Punkt, danach Lücke bis zum Morgen) – dafür die Minuten je Wert, oder
+     *  - die folgenden 30 Minuten weniger als ein Fünftel davon zeigen.
+     * Echte Leistung um Mitternacht (z. B. aus einem Speicher) hat lückenlos weitere, ähnliche
+     * Werte und bleibt erhalten.
+     * @param array $minutes Minute des Tages je Wert (gleiche Reihenfolge wie $data), falls bekannt
      */
-    public static function withoutCarryOver(array $data): array
+    public static function withoutCarryOver(array $data, array $minutes = []): array
     {
         $keys = array_keys($data);
         if (count($keys) < 2) {
@@ -509,6 +512,11 @@ class HoymilesClient
         }
         $first = (float) $data[$keys[0]];
         if (!is_finite($first) || $first <= 0) {
+            return $data;
+        }
+        $minutes = array_values($minutes);
+        if (isset($minutes[0], $minutes[1]) && $minutes[0] < 30 && $minutes[1] - $minutes[0] > 30) {
+            $data[$keys[0]] = 0.0;
             return $data;
         }
         $next = 0.0;
@@ -524,6 +532,16 @@ class HoymilesClient
         return $data;
     }
 
+    /** Minute des Tages je Wert einer Reihe (aus der Zeitachse), soweit lesbar. */
+    private static function dataMinutes(array $chart, array $data): array
+    {
+        $out = [];
+        foreach (array_keys($data) as $idx) {
+            $out[] = self::labelMinute($chart['x_axis'][$idx] ?? null);
+        }
+        return $out;
+    }
+
     /** Energie eines Tagesverlaufs in Wh (Summe der Leistungswerte × Rasterlänge). */
     public static function chartEnergyWh(array $chart): float
     {
@@ -531,7 +549,7 @@ class HoymilesClient
             if ($s['type'] === 'MODULE_POWER' && $s['data']) {
                 $minutes = self::slotMinutes($chart['x_axis']);
                 $sum = 0.0;
-                foreach (self::withoutCarryOver($s['data']) as $w) {
+                foreach (self::withoutCarryOver($s['data'], self::dataMinutes($chart, $s['data'])) as $w) {
                     if (is_finite((float) $w) && $w > 0) {
                         $sum += (float) $w;
                     }
@@ -565,7 +583,7 @@ class HoymilesClient
                     break;
                 }
             }
-            foreach (self::withoutCarryOver($s['data']) as $idx => $w) {
+            foreach (self::withoutCarryOver($s['data'], self::dataMinutes($chart, $s['data'])) as $idx => $w) {
                 if (!is_finite((float) $w)) {
                     continue;
                 }
@@ -633,7 +651,7 @@ class HoymilesClient
             return 5.0;
         }
         sort($diffs);
-        return (float) $diffs[intdiv(count($diffs), 2)]; // Median
+        return (float) $diffs[intdiv(count($diffs) - 1, 2)]; // (unterer) Median
     }
 
     /** Liste [{key, val}] in key => val umwandeln. */
