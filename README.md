@@ -4,7 +4,7 @@ Dieses Modul holt die Daten eines Hoymiles-Mikrowechselrichters (z. B. **HMS-180
 
 Das Modul braucht keinen direkten Zugriff auf den Wechselrichter oder die DTU im Heimnetz. Es nutzt dieselben Zugangsdaten wie die S-Miles-App auf dem Handy. Das ist besonders dann praktisch, wenn eine lokale Anbindung (z. B. über OpenDTU) nicht oder nicht mehr funktioniert.
 
-Version 1.0 · ab IP-Symcon 7.0 · Oberfläche Deutsch und Englisch · Lizenz MIT
+Version 1.1 · ab IP-Symcon 7.0 · Oberfläche Deutsch und Englisch · Lizenz MIT
 
 ---
 
@@ -645,18 +645,36 @@ phpunit --configuration phpunit.xml
 
 ## 21. Versionshistorie
 
+### Was ist neu in 1.1
+
+Version 1.1 fasst alle Erweiterungen seit 1.0 zusammen. Bestehende Einstellungen, Variablen und Archivdaten bleiben beim Update erhalten – es muss nichts neu eingerichtet werden.
+
+- **Kachel für die Kachel-Visualisierung:** aktuelle Leistung mit Ring, Tagesertrag und Ersparnis, Tagesverlauf, Balken je PV-Eingang, Störungsanzeige und Aktualisieren-Knopf. Aktualisiert sich selbst, auch nach dem Öffnen oder wenn die App im Hintergrund war.
+- **Hintergrund der Kachel:** gezeichnetes Haus mit Tag/Nacht-Darstellung, eigenes Bild rechts oben oder über die ganze Kachel; große Bilder werden automatisch verkleinert.
+- **Wechselrichter steuern:** Neustart, Aus- und Einschalten, DTU-Neustart über das Formular oder `HOYM_SendCommand`.
+- **Störungswarnungen:** keine Daten, hell aber kaum Leistung, ein Eingang deutlich schwächer – mit Push-Nachricht oder eigenem Skript; keine Fehlalarme bei wenig Licht oder fehlenden Werten.
+- **PV-Eingänge einzeln:** Leistung, Spannung, Strom und Tagesertrag je Eingang; Einstellung „Solarmodul“, „Speicher“ (z. B. Zendure) oder „nicht belegt“.
+- **Nachtmodus:** seltener abfragen, wenn es dunkel ist – über Helligkeitssensor (Schwelle wird automatisch gelernt), Sonnenauf- und -untergang oder den Datenstand der Cloud.
+- **Ersparnis in Euro**, **Firmware-Stände** mit Update-Hinweis und **Verlauf ins Archiv nachladen**.
+- **Genauere Tagesverläufe:** Überbleibsel vom Vortag um Mitternacht und unfertige letzte Abschnitte der Cloud werden erkannt.
+- **Sicherheit:** keine unsichere Legacy-Anmeldung in der automatischen Erkennung, gesalzener Prüfwert für die Zugangsdaten.
+- **Englische Oberfläche mit deutscher Übersetzung**, automatische Tests und GitHub-Workflow.
+
+### Alle Builds
+
 | Version | Build | Änderungen |
 |---------|-------|------------|
-| 1.0 | 11 | Schwelle des Helligkeitssensors wird automatisch aus der Helligkeit beim morgendlichen Produktionsstart gelernt; aufwendigere Haus-Illustration mit Lichtreflex auf den Modulen, Energiefluss in den Speicher, ziehender Wolke und funkelnden Sternen |
-| 1.0 | 12 | Kachel holt sich den aktuellen Stand, sobald sie wieder sichtbar wird (verpasste Aktualisierungen, z. B. wenn die App im Hintergrund war); Uhrzeit von Cloud-Daten, letztem und nächstem Abruf in der Fußzeile |
-| 1.0 | 13 | Kachel fragt beim Öffnen sofort die Cloud ab, wenn der letzte Abruf älter als eine Minute ist; Uhrzeit des letzten Abrufs direkt in der Fußzeile |
-| 1.0 | 14 | Keine „liefert nur 0 %“-Fehlalarme mehr, wenn die Cloud für einen Eingang gerade keinen Wert liefert; Warnung „Eingang schwächer“ verschwindet auch bei wenig Licht, sobald die Eingänge wieder gleichauf liegen; Überbleibsel vom Vortag um Mitternacht (Zacke im Tagesverlauf, zu hohe Tageserträge je Eingang) wird ignoriert; mehrere Warnungen in der Kachel untereinander |
-| 1.0 | 15 | Überbleibsel um Mitternacht wird auch erkannt, wenn danach kleine Werte folgen (Ruhestrom des Speichers); Tagesverlauf und Ertrag je Eingang werden nach dem Übernehmen bzw. Update sofort neu berechnet |
-| 1.0 | 16 | Überbleibsel um Mitternacht wird zusätzlich in der Summe aller Eingänge erkannt; kein Einbruch auf 0 W mehr am Ende des Tagesverlaufs, wenn der letzte Abschnitt in der Cloud noch nicht fertig ist |
-| 1.0 | 17 | Überbleibsel um Mitternacht wird an der Zeitlücke erkannt (einzelner Wert um 00:00, nächster erst am Morgen) – auch bei Speicher-Eingängen, die morgens gleich Leistung liefern; genauere Ertragsberechnung bei lückenhaften Tagesverläufen; ausführlichere Debug-Ausgabe zum Tagesverlauf |
-| 1.0 | 18 | Kachel: eigenes Bild wahlweise an Stelle der Haus-Illustration (rechts oben, weich ausgeblendete Ränder, nachts abgedunkelt) |
-| 1.0 | 19 | Große Bilder für die Kachel werden automatisch verkleinert (behebt „Output-Buffer exceeds Limit“) |
+| 1.1 | 21 | Version 1.1: Zusammenfassung aller Erweiterungen seit 1.0 (siehe oben) |
 | 1.0 | 20 | Verkleinern sehr großer Bilder prüft vorher den freien Speicher (hebt die PHP-Grenze bei Bedarf kurz an) – kein „Allowed memory size exhausted“ mehr beim Übernehmen; ist es trotzdem zu groß, erscheint die Illustration und ein Hinweis im Meldungsfenster |
+| 1.0 | 19 | Große Bilder für die Kachel werden automatisch verkleinert (behebt „Output-Buffer exceeds Limit“) |
+| 1.0 | 18 | Kachel: eigenes Bild wahlweise an Stelle der Haus-Illustration (rechts oben, weich ausgeblendete Ränder, nachts abgedunkelt) |
+| 1.0 | 17 | Überbleibsel um Mitternacht wird an der Zeitlücke erkannt (einzelner Wert um 00:00, nächster erst am Morgen) – auch bei Speicher-Eingängen, die morgens gleich Leistung liefern; genauere Ertragsberechnung bei lückenhaften Tagesverläufen; ausführlichere Debug-Ausgabe zum Tagesverlauf |
+| 1.0 | 16 | Überbleibsel um Mitternacht wird zusätzlich in der Summe aller Eingänge erkannt; kein Einbruch auf 0 W mehr am Ende des Tagesverlaufs, wenn der letzte Abschnitt in der Cloud noch nicht fertig ist |
+| 1.0 | 15 | Überbleibsel um Mitternacht wird auch erkannt, wenn danach kleine Werte folgen (Ruhestrom des Speichers); Tagesverlauf und Ertrag je Eingang werden nach dem Übernehmen bzw. Update sofort neu berechnet |
+| 1.0 | 14 | Keine „liefert nur 0 %“-Fehlalarme mehr, wenn die Cloud für einen Eingang gerade keinen Wert liefert; Warnung „Eingang schwächer“ verschwindet auch bei wenig Licht, sobald die Eingänge wieder gleichauf liegen; Überbleibsel vom Vortag um Mitternacht (Zacke im Tagesverlauf, zu hohe Tageserträge je Eingang) wird ignoriert; mehrere Warnungen in der Kachel untereinander |
+| 1.0 | 13 | Kachel fragt beim Öffnen sofort die Cloud ab, wenn der letzte Abruf älter als eine Minute ist; Uhrzeit des letzten Abrufs direkt in der Fußzeile |
+| 1.0 | 12 | Kachel holt sich den aktuellen Stand, sobald sie wieder sichtbar wird (verpasste Aktualisierungen, z. B. wenn die App im Hintergrund war); Uhrzeit von Cloud-Daten, letztem und nächstem Abruf in der Fußzeile |
+| 1.0 | 11 | Schwelle des Helligkeitssensors wird automatisch aus der Helligkeit beim morgendlichen Produktionsstart gelernt; aufwendigere Haus-Illustration mit Lichtreflex auf den Modulen, Energiefluss in den Speicher, ziehender Wolke und funkelnden Sternen |
 | 1.0 | 10 | Kachel-Hintergrund: Illustration (Haus mit Solarmodulen, Tag/Nacht), eigenes Bild aus einem Medienobjekt oder keiner; Kachel-Einstellungen in eigenem Formularbereich |
 | 1.0 | 9 | Geänderte PV-Eingänge oder Warn-Einstellungen setzen die betroffenen Warnungen sofort zurück; Tagesverlauf bleibt bei Störungsmeldung sichtbar, sofern Platz ist |
 | 1.0 | 8 | Kachel: Platz oben für Titel und Vollbild-Knopf der Visualisierung, größerer Aktualisieren-Knopf, kompaktere Darstellung bei mittlerer Höhe; Tagesverlauf auch bei anderen Zeitformaten der Cloud; Eingangsvergleich erst ab 10 % der Nennleistung |
