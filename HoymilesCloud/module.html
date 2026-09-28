@@ -162,6 +162,8 @@
     /* Fußzeile */
     .foot { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 6px; }
     .foot b { color: currentColor; font-weight: 600; }
+    .foot .q { opacity: 0.8; }
+    @media (max-width: 330px) { .foot .q { display: none; } }
     .alarm {
         display: flex; gap: 6px; align-items: flex-start; font-size: 12px;
         padding: 6px 8px; border-radius: 8px; background: color-mix(in srgb, var(--critical) 14%, transparent);
@@ -537,6 +539,9 @@
         if (!hmState || !hmState.configured) { return; }
         const s = hmState, L = s.labels, el = document.getElementById('fTotal');
         el.textContent = L.dataTime + ' ' + hmAgo(s.dataTime, L);
+        if (s.lastUpdate) {
+            el.append(Object.assign(document.createElement('span'), { className: 'q', textContent: ' · ' + L.queried + ' ' + hmTime(s.lastUpdate) }));
+        }
         el.title = L.cloudTime + ' ' + hmTime(s.dataTime) + '\n' + L.lastQuery + ': ' + hmTime(s.lastUpdate)
             + (s.nextUpdate ? '\n' + L.nextQuery + ': ' + hmTime(s.nextUpdate) : '');
     }
@@ -544,11 +549,20 @@
     // Kachel wieder sichtbar (App aus dem Hintergrund, Seite gewechselt, Kachel geöffnet):
     // aktuellen Stand beim Modul anfordern. Nachrichten, die in der Zwischenzeit verloren
     // gingen, werden so nachgeholt. Das fragt nicht die Cloud ab, sondern nur das Modul.
+    // Ist der letzte Abruf älter als eine Minute, wird wie beim Aktualisieren-Knopf
+    // gleich die Cloud abgefragt; sonst genügt der Stand des Moduls.
     let hmSyncAt = 0;
     function hmSync() {
         if (document.visibilityState === 'hidden' || Date.now() - hmSyncAt < 15000) { return; }
         hmSyncAt = Date.now();
-        try { requestAction('Sync', true); } catch (e) { /* ältere Visualisierung */ }
+        const stale = !hmState || !hmState.lastUpdate || Date.now() / 1000 - hmState.lastUpdate > 60;
+        try {
+            if (stale && hmState && hmState.configured && hmState.status !== 'night') {
+                hmRefresh();
+            } else {
+                requestAction('Sync', true);
+            }
+        } catch (e) { /* ältere Visualisierung */ }
     }
     document.addEventListener('visibilitychange', hmSync);
     window.addEventListener('focus', hmSync);

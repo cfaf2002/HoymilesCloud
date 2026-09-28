@@ -1464,6 +1464,7 @@ class HoymilesCloud extends IPSModule
                 'year'          => $this->Translate('Year'),
                 'dataTime'      => $this->Translate('Data'),
                 'lastQuery'     => $this->Translate('Last query'),
+                'queried'       => $this->Translate('queried'),
                 'nextQuery'     => $this->Translate('next query'),
                 'cloudTime'     => $this->Translate('Cloud data from'),
                 'justNow'       => $this->Translate('just now'),

@@ -172,7 +172,8 @@
             "Nothing learned yet – the threshold entered above applies until the first morning with a brightness sensor.": "Noch nichts gelernt – bis zum ersten Morgen mit Helligkeitssensor gilt die oben eingetragene Schwelle.",
             "Learned threshold: %s (80 %% of the brightness at production start, last days: %s)": "Gelernte Schwelle: %s (80 %% der Helligkeit beim Produktionsstart, letzte Tage: %s)",
             "next query": "nächster Abruf",
-            "Cloud data from": "Cloud-Daten von"
+            "Cloud data from": "Cloud-Daten von",
+            "queried": "abgerufen"
         }
     }
 }
