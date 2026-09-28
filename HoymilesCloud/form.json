@@ -327,7 +327,7 @@
                 },
                 {
                     "type": "Label",
-                    "caption": "Top right: the image replaces the house illustration; its edges are softly faded, at night it is dimmed. A picture of your house with a dark or plain background works best. Whole tile: the image is shown faded behind the values (recommended 20–40 %). Upload the image in the object tree as a media object (image, max. 3 MB) and select it here."
+                    "caption": "Top right: the image replaces the house illustration; its edges are softly faded, at night it is dimmed. A picture of your house with a dark or plain background works best. Whole tile: the image is shown faded behind the values (recommended 20–40 %). Upload the image in the object tree as a media object (image; large images are scaled down automatically) and select it here."
                 },
                 {
                     "type": "NumberSpinner",

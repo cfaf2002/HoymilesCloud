@@ -1390,15 +1390,86 @@ class HoymilesCloud extends IPSModule
         if ($media <= 0 || !IPS_MediaExists($media)) {
             return ['mode' => 'illustration', 'image' => null, 'opacity' => $opacity];
         }
-        $content = (string) IPS_GetMediaContent($media); // Base64
-        if ($content === '' || strlen($content) > 4 * 1024 * 1024) {
-            $this->SendDebug('Tile', 'background image missing or larger than 3 MB – using the illustration', 0);
+        $image = $this->tileImageData($media, $mode === 'picture' ? 800 : 1600);
+        if ($image === '') {
             return ['mode' => 'illustration', 'image' => null, 'opacity' => $opacity];
         }
+        return ['mode' => $mode, 'image' => $image, 'opacity' => $opacity];
+    }
+
+    /**
+     * Bild als data-URI für die Kachel. Große Bilder werden verkleinert (längste Seite $maxSize px,
+     * JPEG bzw. PNG bei Transparenz), damit die Kachel die Grenze der Visualisierung von 1 MB
+     * nicht überschreitet. Das Ergebnis wird zwischengespeichert.
+     */
+    private function tileImageData(int $media, int $maxSize): string
+    {
+        $content = (string) IPS_GetMediaContent($media); // Base64
+        if ($content === '') {
+            $this->SendDebug('Tile', 'image is empty – using the illustration', 0);
+            return '';
+        }
+        $key = md5($media . '|' . $maxSize . '|' . strlen($content) . '|' . substr($content, 0, 64) . '|' . substr($content, -64));
+        $cache = json_decode($this->GetBuffer('TileImage'), true) ?: [];
+        if (($cache['key'] ?? '') === $key) {
+            return (string) $cache['uri'];
+        }
+
         $types = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif', 'svg' => 'image/svg+xml'];
         $ext = strtolower(pathinfo((string) IPS_GetMedia($media)['MediaFile'], PATHINFO_EXTENSION));
         $mime = $types[$ext] ?? 'image/jpeg';
-        return ['mode' => $mode, 'image' => "data:$mime;base64,$content", 'opacity' => $opacity];
+        $uri = "data:$mime;base64,$content";
+
+        $scaled = self::scaleImage($content, $mime, $maxSize);
+        if ($scaled !== null) {
+            $uri = $scaled['uri'];
+            $this->SendDebug('Tile', sprintf('image %dx%d scaled to %dx%d (%d kB)', $scaled['from'][0], $scaled['from'][1], $scaled['to'][0], $scaled['to'][1], strlen($uri) * 3 / 4 / 1024), 0);
+        }
+        if (strlen($uri) > 700 * 1024) {
+            $this->SendDebug('Tile', 'image too large for the tile even after scaling (' . round(strlen($uri) / 1024) . ' kB) – using the illustration. Please use a smaller image (JPEG, max. ~500 kB).', 0);
+            $this->LogMessage($this->Translate('Tile image is too large – please use a smaller image (JPEG, max. approx. 500 kB).'), KL_WARNING);
+            return '';
+        }
+        $this->SetBuffer('TileImage', json_encode(['key' => $key, 'uri' => $uri]));
+        return $uri;
+    }
+
+    /**
+     * Verkleinert ein Bild (Base64) auf höchstens $maxSize px Kantenlänge.
+     * @return array{uri:string,from:array,to:array}|null null, wenn nicht nötig oder nicht möglich
+     */
+    public static function scaleImage(string $base64, string $mime, int $maxSize): ?array
+    {
+        $raw = base64_decode($base64, true);
+        if ($mime === 'image/svg+xml' || $raw === false || !function_exists('imagecreatefromstring')) {
+            return null;
+        }
+        $img = @imagecreatefromstring($raw);
+        if ($img === false) {
+            return null;
+        }
+        $w = imagesx($img);
+        $h = imagesy($img);
+        $scale = min(1.0, $maxSize / max($w, $h, 1));
+        $nw = max(1, (int) round($w * $scale));
+        $nh = max(1, (int) round($h * $scale));
+        $out = imagecreatetruecolor($nw, $nh);
+        $alpha = in_array($mime, ['image/png', 'image/webp', 'image/gif'], true);
+        if ($alpha) {
+            imagealphablending($out, false);
+            imagesavealpha($out, true);
+            imagefill($out, 0, 0, imagecolorallocatealpha($out, 0, 0, 0, 127));
+        }
+        imagecopyresampled($out, $img, 0, 0, 0, 0, $nw, $nh, $w, $h);
+        ob_start();
+        $alpha ? imagepng($out, null, 9) : imagejpeg($out, null, 82);
+        $data = (string) ob_get_clean();
+        imagedestroy($img);
+        imagedestroy($out);
+        if ($data === '' || strlen($data) >= strlen($raw)) {
+            return null;
+        }
+        return ['uri' => 'data:' . ($alpha ? 'image/png' : 'image/jpeg') . ';base64,' . base64_encode($data), 'from' => [$w, $h], 'to' => [$nw, $nh]];
     }
 
     private function pushTile(): void
