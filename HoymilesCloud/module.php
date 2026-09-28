@@ -824,6 +824,8 @@ class HoymilesCloud extends IPSModule
             }
         }
         ksort($curve);
+        // Überbleibsel um Mitternacht auch in der Summe prüfen (falls ein Eingang anders meldet)
+        $curve = array_combine(array_keys($curve), HoymilesClient::withoutCarryOver(array_values($curve)));
         $points = [];
         foreach ($curve as $minute => $watt) {
             $points[] = [$minute, (int) round($watt * $scale)];
@@ -1444,6 +1446,10 @@ class HoymilesCloud extends IPSModule
         if ($dataTs && date('Y-m-d', $dataTs) === date('Y-m-d') && $value('Producing', false)) {
             $minute = (int) date('G', $dataTs) * 60 + (int) date('i', $dataTs);
             if (!$curve || end($curve)[0] < $minute) {
+                // Der letzte Abschnitt ist in der Cloud oft noch nicht fertig (0 W): nicht als Einbruch zeigen
+                while ($power > 0 && $curve && end($curve)[1] <= 0 && $minute - end($curve)[0] <= 15) {
+                    array_pop($curve);
+                }
                 $curve[] = [$minute, (int) round($power)];
             }
         }
