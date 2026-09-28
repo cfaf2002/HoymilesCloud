@@ -191,6 +191,7 @@ class HoymilesCloud extends IPSModule
             return;
         }
         // Erster Abruf kurz nach dem Übernehmen, damit das Speichern nicht blockiert
+        $this->WriteAttributeInteger('EnergyCalcAt', 0); // Tagesverlauf und Ertrag je Eingang beim ersten Abruf neu berechnen
         $this->SetTimerInterval('UpdateTimer', 2000);
         $this->UpdateVisualizationValue(json_encode(['background' => $this->tileBackground()]));
         $this->pushTile();
@@ -814,7 +815,9 @@ class HoymilesCloud extends IPSModule
                 (string) ($chart['x_axis'][0] ?? ''),
                 (string) (end($chart['x_axis']) ?: ''),
                 count($chart['series'][0]['data'] ?? [])
-            ), 0);
+            ) . ', first values: ' . implode(' / ', array_map(static function ($v) {
+                return is_finite((float) $v) ? (string) round((float) $v, 1) : '-';
+            }, array_slice($chart['series'][0]['data'] ?? [], 0, 4))), 0);
             foreach (HoymilesClient::chartPowerSamples($chart, date('Y-m-d'), $lastTs) as $sample) {
                 $minute = (int) date('G', $sample['TimeStamp']) * 60 + (int) date('i', $sample['TimeStamp']);
                 $curve[$minute] = ($curve[$minute] ?? 0) + $sample['Value'];
