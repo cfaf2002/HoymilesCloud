@@ -163,7 +163,6 @@
             "None": "Keiner",
             "Own image (media object)": "Eigenes Bild (Medienobjekt)",
             "Visibility of the own image": "Sichtbarkeit des eigenen Bildes",
-            "The own image is shown faded over the whole tile so that values remain readable (recommended 20–40 %). Upload a photo of your house or solar panels in the object tree as a media object (image, max. 3 MB) and select it here.": "Das eigene Bild wird abgeblendet über die ganze Kachel gelegt, damit die Werte lesbar bleiben (empfohlen 20–40 %). Ein Foto vom Haus oder den Solarmodulen im Objektbaum als Medienobjekt (Bild, max. 3 MB) hochladen und hier auswählen.",
             "It is day from this brightness (used until a value has been learned)": "Ab dieser Helligkeit ist Tag (gilt, bis ein Wert gelernt ist)",
             "Learn the threshold automatically (from the brightness when the inverter starts in the morning)": "Schwelle automatisch lernen (aus der Helligkeit beim Produktionsstart am Morgen)",
             "Nothing learned yet.": "Noch nichts gelernt.",
@@ -173,7 +172,11 @@
             "Learned threshold: %s (80 %% of the brightness at production start, last days: %s)": "Gelernte Schwelle: %s (80 %% der Helligkeit beim Produktionsstart, letzte Tage: %s)",
             "next query": "nächster Abruf",
             "Cloud data from": "Cloud-Daten von",
-            "queried": "abgerufen"
+            "queried": "abgerufen",
+            "Own image in place of the illustration (top right)": "Eigenes Bild an Stelle der Illustration (rechts oben)",
+            "Own image over the whole tile (faded)": "Eigenes Bild über die ganze Kachel (abgeblendet)",
+            "Visibility of the own image (whole tile only)": "Sichtbarkeit des eigenen Bildes (nur ganze Kachel)",
+            "Top right: the image replaces the house illustration; its edges are softly faded, at night it is dimmed. A picture of your house with a dark or plain background works best. Whole tile: the image is shown faded behind the values (recommended 20–40 %). Upload the image in the object tree as a media object (image, max. 3 MB) and select it here.": "Rechts oben: Das Bild ersetzt die Haus-Illustration, die Ränder werden weich ausgeblendet, nachts wird es abgedunkelt. Am besten wirkt ein Bild deines Hauses mit dunklem oder ruhigem Hintergrund. Ganze Kachel: Das Bild liegt abgeblendet hinter den Werten (empfohlen 20–40 %). Das Bild im Objektbaum als Medienobjekt (Bild, max. 3 MB) anlegen und hier auswählen."
         }
     }
 }

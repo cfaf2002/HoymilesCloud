@@ -81,8 +81,21 @@
     @keyframes hmShine { 0%, 55% { opacity: 0; transform: translateX(0); } 60% { opacity: 1; } 95% { opacity: 1; } 100% { opacity: 0; transform: translateX(150px); } }
     @keyframes hmFlow { to { stroke-dashoffset: -16; } }
     @media (prefers-reduced-motion: reduce) { #bgArt * { animation: none !important; } }
-    @media (max-width: 420px), (max-height: 210px) { #bgArt { display: none; } }
-    @media (max-height: 400px) { #bgArt { height: 100px; top: calc(var(--top-safe, 48px) + 34px); } }
+    @media (max-width: 420px), (max-height: 210px) { #bgArt, #bgPic { display: none; } }
+    @media (max-height: 400px) { #bgArt { height: 100px; top: calc(var(--top-safe, 48px) + 34px); } #bgPic { height: 108px; } }
+
+    /* eigenes Bild an Stelle der Illustration: rechts oben, Ränder weich ausgeblendet */
+    #bgPic {
+        position: fixed; z-index: 0; pointer-events: none;
+        top: calc(var(--top-safe, 48px) + 30px); right: 6px;
+        height: 128px; aspect-ratio: 16 / 10; max-width: 46%;
+        background-size: cover; background-repeat: no-repeat; background-position: center;
+        -webkit-mask-image: radial-gradient(closest-side, #000 58%, transparent 100%);
+        mask-image: radial-gradient(closest-side, #000 58%, transparent 100%);
+        transition: filter 1.5s;
+    }
+    #hm[data-status="night"] #bgPic { filter: brightness(0.55) saturate(0.75); }
+    #hm[data-status="standby"] #bgPic { filter: saturate(0.6); }
 
     /* Kopfzeile */
     .head { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 30px; }
@@ -213,6 +226,7 @@
 
 <div id="hm" data-status="standby">
     <div id="bgImg" class="hidden"></div>
+    <div id="bgPic" class="hidden" aria-hidden="true"></div>
     <div id="bgArt" class="hidden" aria-hidden="true">
         <svg viewBox="0 0 240 140">
             <defs>
@@ -370,15 +384,13 @@
     }
 
     function hmApplyBackground(bg) {
-        const img = document.getElementById('bgImg');
+        const img = document.getElementById('bgImg'), pic = document.getElementById('bgPic');
         hmShow('bgArt', bg.mode === 'illustration');
         hmShow('bgImg', bg.mode === 'image' && !!bg.image);
-        if (bg.mode === 'image' && bg.image) {
-            img.style.backgroundImage = 'url("' + bg.image + '")';
-            img.style.opacity = String(bg.opacity);
-        } else {
-            img.style.backgroundImage = '';
-        }
+        hmShow('bgPic', bg.mode === 'picture' && !!bg.image);
+        img.style.backgroundImage = bg.mode === 'image' && bg.image ? 'url("' + bg.image + '")' : '';
+        img.style.opacity = String(bg.opacity);
+        pic.style.backgroundImage = bg.mode === 'picture' && bg.image ? 'url("' + bg.image + '")' : '';
     }
 
     function handleMessage(data) {

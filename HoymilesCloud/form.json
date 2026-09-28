@@ -298,7 +298,11 @@
                             "value": "illustration"
                         },
                         {
-                            "caption": "Own image",
+                            "caption": "Own image in place of the illustration (top right)",
+                            "value": "picture"
+                        },
+                        {
+                            "caption": "Own image over the whole tile (faded)",
                             "value": "image"
                         },
                         {
@@ -316,14 +320,14 @@
                 {
                     "type": "NumberSpinner",
                     "name": "TileImageOpacity",
-                    "caption": "Visibility of the own image",
+                    "caption": "Visibility of the own image (whole tile only)",
                     "suffix": "%",
                     "minimum": 5,
                     "maximum": 100
                 },
                 {
                     "type": "Label",
-                    "caption": "The own image is shown faded over the whole tile so that values remain readable (recommended 20–40 %). Upload a photo of your house or solar panels in the object tree as a media object (image, max. 3 MB) and select it here."
+                    "caption": "Top right: the image replaces the house illustration; its edges are softly faded, at night it is dimmed. A picture of your house with a dark or plain background works best. Whole tile: the image is shown faded behind the values (recommended 20–40 %). Upload the image in the object tree as a media object (image, max. 3 MB) and select it here."
                 },
                 {
                     "type": "NumberSpinner",

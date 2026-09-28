@@ -84,7 +84,7 @@ class HoymilesCloud extends IPSModule
 
         // Kachel
         $this->RegisterPropertyInteger('TileMaxPower', 0); // 0 = aus dem Wechselrichter-Modell
-        $this->RegisterPropertyString('TileBackground', 'illustration'); // illustration | image | none
+        $this->RegisterPropertyString('TileBackground', 'illustration'); // illustration | picture | image | none
         $this->RegisterPropertyInteger('TileImage', 0);                 // Medienobjekt (Bild)
         $this->RegisterPropertyInteger('TileImageOpacity', 30);          // %
 
@@ -1383,7 +1383,7 @@ class HoymilesCloud extends IPSModule
     {
         $mode = $this->ReadPropertyString('TileBackground');
         $opacity = max(5, min(100, $this->ReadPropertyInteger('TileImageOpacity'))) / 100;
-        if ($mode !== 'image') {
+        if ($mode !== 'image' && $mode !== 'picture') {
             return ['mode' => $mode === 'none' ? 'none' : 'illustration', 'image' => null, 'opacity' => $opacity];
         }
         $media = $this->ReadPropertyInteger('TileImage');
@@ -1398,7 +1398,7 @@ class HoymilesCloud extends IPSModule
         $types = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif', 'svg' => 'image/svg+xml'];
         $ext = strtolower(pathinfo((string) IPS_GetMedia($media)['MediaFile'], PATHINFO_EXTENSION));
         $mime = $types[$ext] ?? 'image/jpeg';
-        return ['mode' => 'image', 'image' => "data:$mime;base64,$content", 'opacity' => $opacity];
+        return ['mode' => $mode, 'image' => "data:$mime;base64,$content", 'opacity' => $opacity];
     }
 
     private function pushTile(): void
