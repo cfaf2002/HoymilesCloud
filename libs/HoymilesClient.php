@@ -495,19 +495,31 @@ class HoymilesClient
     }
 
     /**
-     * Der erste Wert eines Tagesverlaufs (Mitternacht) ist manchmal ein Überbleibsel vom Vortag:
-     * ein einzelner hoher Wert, gefolgt von Nullen bis zum Sonnenaufgang. Er wird ignoriert.
-     * Echte Leistung um Mitternacht (z. B. aus einem Speicher) hat auch danach Werte > 0.
+     * Der erste Wert eines Tagesverlaufs (Mitternacht) ist oft ein Überbleibsel vom Vortag:
+     * ein einzelner hoher Wert, danach bis zum Sonnenaufgang nur Nullen oder kleine Werte
+     * (z. B. Ruhestrom eines Speichers). Er wird ignoriert, wenn die folgenden 30 Minuten
+     * weniger als ein Fünftel davon zeigen. Echte Leistung um Mitternacht (z. B. aus einem
+     * Speicher) hat auch danach ähnliche Werte und bleibt erhalten.
      */
     public static function withoutCarryOver(array $data): array
     {
         $keys = array_keys($data);
-        if (count($keys) >= 2) {
-            $first = (float) $data[$keys[0]];
-            $next = (float) $data[$keys[1]];
-            if ($first > 0 && (!is_finite($next) || $next <= 0)) {
-                $data[$keys[0]] = 0.0;
+        if (count($keys) < 2) {
+            return $data;
+        }
+        $first = (float) $data[$keys[0]];
+        if (!is_finite($first) || $first <= 0) {
+            return $data;
+        }
+        $next = 0.0;
+        foreach (array_slice($keys, 1, 6) as $k) {
+            $v = (float) $data[$k];
+            if (is_finite($v)) {
+                $next = max($next, $v);
             }
+        }
+        if ($next < $first * 0.2) {
+            $data[$keys[0]] = 0.0;
         }
         return $data;
     }
