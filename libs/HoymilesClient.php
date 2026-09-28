@@ -471,7 +471,7 @@ class HoymilesClient
     public static function latestModuleValues(array $chart, int $maxAgeMinutes): array
     {
         $digits = ['MODULE_POWER' => 1, 'MODULE_V' => 1, 'MODULE_I' => 2];
-        $out = ['MODULE_POWER' => null, 'MODULE_V' => null, 'MODULE_I' => null, 'slot' => null];
+        $out = ['MODULE_POWER' => null, 'MODULE_V' => null, 'MODULE_I' => null, 'slot' => null, 'fresh' => false];
         foreach ($chart['series'] as $s) {
             $type = $s['type'];
             if (!array_key_exists($type, $digits) || !$s['data']) {
@@ -487,8 +487,29 @@ class HoymilesClient
                 $fresh = $slotTs > time() || (time() - $slotTs) <= $maxAgeMinutes * 60;
             }
             $out[$type] = $fresh ? round((float) end($s['data']), $digits[$type]) : 0.0;
+            if ($type === 'MODULE_POWER') {
+                $out['fresh'] = $fresh;
+            }
         }
         return $out;
+    }
+
+    /**
+     * Der erste Wert eines Tagesverlaufs (Mitternacht) ist manchmal ein Überbleibsel vom Vortag:
+     * ein einzelner hoher Wert, gefolgt von Nullen bis zum Sonnenaufgang. Er wird ignoriert.
+     * Echte Leistung um Mitternacht (z. B. aus einem Speicher) hat auch danach Werte > 0.
+     */
+    public static function withoutCarryOver(array $data): array
+    {
+        $keys = array_keys($data);
+        if (count($keys) >= 2) {
+            $first = (float) $data[$keys[0]];
+            $next = (float) $data[$keys[1]];
+            if ($first > 0 && (!is_finite($next) || $next <= 0)) {
+                $data[$keys[0]] = 0.0;
+            }
+        }
+        return $data;
     }
 
     /** Energie eines Tagesverlaufs in Wh (Summe der Leistungswerte × Rasterlänge). */
@@ -498,7 +519,7 @@ class HoymilesClient
             if ($s['type'] === 'MODULE_POWER' && $s['data']) {
                 $minutes = self::slotMinutes($chart['x_axis']);
                 $sum = 0.0;
-                foreach ($s['data'] as $w) {
+                foreach (self::withoutCarryOver($s['data']) as $w) {
                     if (is_finite((float) $w) && $w > 0) {
                         $sum += (float) $w;
                     }
@@ -532,7 +553,7 @@ class HoymilesClient
                     break;
                 }
             }
-            foreach ($s['data'] as $idx => $w) {
+            foreach (self::withoutCarryOver($s['data']) as $idx => $w) {
                 if (!is_finite((float) $w)) {
                     continue;
                 }
