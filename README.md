@@ -656,6 +656,7 @@ phpunit --configuration phpunit.xml
 | 1.0 | 17 | Überbleibsel um Mitternacht wird an der Zeitlücke erkannt (einzelner Wert um 00:00, nächster erst am Morgen) – auch bei Speicher-Eingängen, die morgens gleich Leistung liefern; genauere Ertragsberechnung bei lückenhaften Tagesverläufen; ausführlichere Debug-Ausgabe zum Tagesverlauf |
 | 1.0 | 18 | Kachel: eigenes Bild wahlweise an Stelle der Haus-Illustration (rechts oben, weich ausgeblendete Ränder, nachts abgedunkelt) |
 | 1.0 | 19 | Große Bilder für die Kachel werden automatisch verkleinert (behebt „Output-Buffer exceeds Limit“) |
+| 1.0 | 20 | Verkleinern sehr großer Bilder prüft vorher den freien Speicher (hebt die PHP-Grenze bei Bedarf kurz an) – kein „Allowed memory size exhausted“ mehr beim Übernehmen; ist es trotzdem zu groß, erscheint die Illustration und ein Hinweis im Meldungsfenster |
 | 1.0 | 10 | Kachel-Hintergrund: Illustration (Haus mit Solarmodulen, Tag/Nacht), eigenes Bild aus einem Medienobjekt oder keiner; Kachel-Einstellungen in eigenem Formularbereich |
 | 1.0 | 9 | Geänderte PV-Eingänge oder Warn-Einstellungen setzen die betroffenen Warnungen sofort zurück; Tagesverlauf bleibt bei Störungsmeldung sichtbar, sofern Platz ist |
 | 1.0 | 8 | Kachel: Platz oben für Titel und Vollbild-Knopf der Visualisierung, größerer Aktualisieren-Knopf, kompaktere Darstellung bei mittlerer Höhe; Tagesverlauf auch bei anderen Zeitformaten der Cloud; Eingangsvergleich erst ab 10 % der Nennleistung |
