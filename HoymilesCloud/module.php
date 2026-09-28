@@ -20,6 +20,9 @@ class HoymilesCloud extends IPSModule
     private const ARCHIVE_GUID = '{43192F0B-135B-4CE7-A0A7-1475603F3060}';
     private const LOCATION_GUID = '{45E97A63-F870-408A-B259-2933F7EABF74}';
     private const WEBFRONT_GUID = '{3565B1F2-8F7B-4311-A4B6-1BF1D868F39E}';
+
+    /** Eingänge, für die beim aktuellen Abruf echte Messwerte vorlagen (nur für die Warnungen). */
+    private $measured = [];
     private const TILE_VISU_GUID = '{B5B875BB-9B76-45FD-4E67-2607E45B3AC4}';
 
     private const CHANNEL_IDENT = '/^(WR\d+_)?PV\d+_(Power|Voltage|Current|Energy)$/';
@@ -692,6 +695,7 @@ class HoymilesCloud extends IPSModule
         // PV-Eingänge: zuerst Anlagen-Indikatoren, fehlende aus dem Tagesverlauf
         $ind = HoymilesClient::indicatorMap($client->getPvIndicators($sid));
         $values = [];
+        $this->measured = [];
         $missing = [];
         foreach ($channels as $c) {
             $n = $c['channel'];
@@ -700,6 +704,7 @@ class HoymilesCloud extends IPSModule
             $i = $n ? ($ind["{$n}_pv_i"] ?? null) : null;
             if ($n && !HoymilesClient::isPlaceholder($p) && !HoymilesClient::isPlaceholder($u)) {
                 $values[$c['ident']] = [(float) $p, (float) $u, $num($i)];
+                $this->measured[$c['ident']] = true;
             } else {
                 $missing[] = $c;
             }
@@ -717,7 +722,17 @@ class HoymilesCloud extends IPSModule
             if ($chart) {
                 $m = HoymilesClient::latestModuleValues($chart, $maxAge);
                 $values[$c['ident']] = [(float) ($m['MODULE_POWER'] ?? 0), (float) ($m['MODULE_V'] ?? 0), (float) ($m['MODULE_I'] ?? 0)];
+                if ($m['fresh'] && $m['MODULE_POWER'] !== null) {
+                    $this->measured[$c['ident']] = true;
+                }
+            } else {
+                // kein Wert zu bekommen: nicht den alten Wert stehen lassen
+                $values[$c['ident']] = [0.0, 0.0, 0.0];
             }
+        }
+        if ($missing) {
+            $this->SendDebug('PV inputs', 'measured: ' . (implode(', ', array_keys($this->measured)) ?: '-')
+                . ' | without current value: ' . (implode(', ', array_diff(array_column($missing, 'ident'), array_keys($this->measured))) ?: '-'), 0);
         }
         foreach ($values as $ident => [$p, $u, $i]) {
             $this->setIfChanged($ident . '_Power', $p);
@@ -978,22 +993,32 @@ class HoymilesCloud extends IPSModule
 
         // 3. Ein PV-Eingang liefert deutlich weniger als die anderen (nur Eingänge mit Solarmodul)
         if ($this->ReadPropertyBoolean('AlarmModules') && count($panels) >= 2) {
+            // Nur Eingänge mit echtem Messwert vergleichen. Fehlt ein Wert (Cloud liefert gerade
+            // nichts), zählt er nicht als 0 W – sonst gäbe es Fehlalarme mit „0 %“.
             $powers = [];
             foreach ($panels as $c) {
-                $powers[$c['ident']] = (float) $this->GetValue($c['ident'] . '_Power');
+                if (isset($this->measured[$c['ident']])) {
+                    $powers[$c['ident']] = (float) $this->GetValue($c['ident'] . '_Power');
+                }
             }
             $deviation = max(10, min(95, $this->ReadPropertyInteger('AlarmModuleDeviation'))) / 100;
             foreach ($panels as $c) {
                 $others = $powers;
                 unset($others[$c['ident']]);
-                $mean = array_sum($others) / count($others);
+                $mean = $others ? array_sum($others) / count($others) : 0.0;
                 $state = null;
                 if ($switchedOff) {
                     $state = false;
-                } elseif ($fresh === true && $mean >= $this->minComparePower($c)) {
-                    $state = $powers[$c['ident']] < $mean * (1 - $deviation);
+                } elseif ($fresh === true && isset($powers[$c['ident']]) && $others) {
+                    $weak = $powers[$c['ident']] < $mean * (1 - $deviation);
+                    if ($mean >= $this->minComparePower($c)) {
+                        $state = $weak;
+                    } elseif (!$weak && $mean > 0) {
+                        // wenig Licht, aber der Eingang liegt im Rahmen der anderen: Warnung aufheben
+                        $state = false;
+                    }
                 }
-                $percent = $mean > 0 ? (int) round($powers[$c['ident']] / $mean * 100) : 0;
+                $percent = $mean > 0 ? (int) round(($powers[$c['ident']] ?? 0) / $mean * 100) : 0;
                 $conditions['module_' . $c['ident']] = [$state, sprintf($this->Translate('%s delivers only %d %% of the other inputs'), $c['name'], $percent), $delay];
             }
         }
