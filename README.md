@@ -185,7 +185,7 @@ Bleibt nur **ein** Solarmodul-Eingang übrig, gibt es nichts zu vergleichen – 
 
 | Feld | Standard | Bedeutung |
 |------|----------|-----------|
-| **Hintergrund** | Illustration | Illustration, eigenes Bild oder keiner (siehe [Abschnitt 12](#12-kachel-für-die-visualisierung)). |
+| **Hintergrund** | Illustration | Illustration, eigenes Bild rechts oben, eigenes Bild über die ganze Kachel oder keiner (siehe [Abschnitt 12](#12-kachel-für-die-visualisierung)). |
 | **Eigenes Bild** | – | Medienobjekt mit dem Hintergrundbild. |
 | **Sichtbarkeit des eigenen Bildes** | 30 % | Wie kräftig das eigene Bild erscheint. |
 | **Nennleistung für den Ring** | 0 | 0 = aus dem Modellnamen des Wechselrichters. Z. B. 800 W eintragen, wenn der Wechselrichter auf 800 W begrenzt ist. |
@@ -434,7 +434,8 @@ Das Modul bringt eine eigene Kachel für die **Kachel-Visualisierung** von Symco
 | Auswahl | Wirkung |
 |---------|---------|
 | **Illustration** (Standard) | Rechts neben der Kopfzahl ein gezeichnetes Haus mit Solarmodulen, Baum und Speicher an der Hauswand. Solange die Anlage produziert, scheint die Sonne, ein Lichtreflex wandert über die Module und Energie fließt vom Dach in den Speicher. Nachts stehen Mond und funkelnde Sterne am Himmel und die Fenster leuchten warm. Erscheint nur in breiten Kacheln, in denen dafür Platz ist. Wer Animationen in den Systemeinstellungen reduziert hat, bekommt ein ruhiges Bild. |
-| **Eigenes Bild** | Ein Foto (z. B. vom eigenen Haus oder den Solarmodulen) wird abgeblendet über die ganze Kachel gelegt. Dazu das Bild im Objektbaum als **Medienobjekt** (Typ Bild, höchstens 3 MB) hochladen und unter **Eigenes Bild** auswählen. Mit **Sichtbarkeit** (Standard 30 %) lässt sich einstellen, wie kräftig es erscheint – 20–40 % halten die Werte gut lesbar. |
+| **Eigenes Bild an Stelle der Illustration** | Ein eigenes Bild (z. B. ein Foto oder Rendering deines Hauses) erscheint rechts oben, dort wo sonst das gezeichnete Haus steht. Die Ränder werden weich ausgeblendet, damit sich das Bild in die Kachel einfügt; nachts wird es abgedunkelt. Am besten wirkt ein Bild mit dunklem oder ruhigem Hintergrund, auf dem das Haus möglichst den ganzen Ausschnitt füllt. Bei schmalen Kacheln wird es – wie die Illustration – ausgeblendet. |
+| **Eigenes Bild über die ganze Kachel** | Ein Foto (z. B. vom eigenen Haus oder den Solarmodulen) wird abgeblendet über die ganze Kachel gelegt. Dazu das Bild im Objektbaum als **Medienobjekt** (Typ Bild, höchstens 3 MB) hochladen und unter **Eigenes Bild** auswählen. Mit **Sichtbarkeit** (Standard 30 %) lässt sich einstellen, wie kräftig es erscheint – 20–40 % halten die Werte gut lesbar. |
 | **Keiner** | Schlichte Kachel ohne Hintergrund. |
 
 **Einstellung:** Die Nennleistung für den Ring nimmt das Modul aus dem Modellnamen (HMS-1800-4T → 1.800 W). Bei einem auf 800 W begrenzten Balkonkraftwerk bietet es sich an, unter **Kachel → Nennleistung für den Ring** 800 W einzutragen – dann ist der Ring bei voller Einspeisung auch voll.
@@ -653,6 +654,7 @@ phpunit --configuration phpunit.xml
 | 1.0 | 15 | Überbleibsel um Mitternacht wird auch erkannt, wenn danach kleine Werte folgen (Ruhestrom des Speichers); Tagesverlauf und Ertrag je Eingang werden nach dem Übernehmen bzw. Update sofort neu berechnet |
 | 1.0 | 16 | Überbleibsel um Mitternacht wird zusätzlich in der Summe aller Eingänge erkannt; kein Einbruch auf 0 W mehr am Ende des Tagesverlaufs, wenn der letzte Abschnitt in der Cloud noch nicht fertig ist |
 | 1.0 | 17 | Überbleibsel um Mitternacht wird an der Zeitlücke erkannt (einzelner Wert um 00:00, nächster erst am Morgen) – auch bei Speicher-Eingängen, die morgens gleich Leistung liefern; genauere Ertragsberechnung bei lückenhaften Tagesverläufen; ausführlichere Debug-Ausgabe zum Tagesverlauf |
+| 1.0 | 18 | Kachel: eigenes Bild wahlweise an Stelle der Haus-Illustration (rechts oben, weich ausgeblendete Ränder, nachts abgedunkelt) |
 | 1.0 | 10 | Kachel-Hintergrund: Illustration (Haus mit Solarmodulen, Tag/Nacht), eigenes Bild aus einem Medienobjekt oder keiner; Kachel-Einstellungen in eigenem Formularbereich |
 | 1.0 | 9 | Geänderte PV-Eingänge oder Warn-Einstellungen setzen die betroffenen Warnungen sofort zurück; Tagesverlauf bleibt bei Störungsmeldung sichtbar, sofern Platz ist |
 | 1.0 | 8 | Kachel: Platz oben für Titel und Vollbild-Knopf der Visualisierung, größerer Aktualisieren-Knopf, kompaktere Darstellung bei mittlerer Höhe; Tagesverlauf auch bei anderen Zeitformaten der Cloud; Eingangsvergleich erst ab 10 % der Nennleistung |
