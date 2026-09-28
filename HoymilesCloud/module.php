@@ -808,16 +808,26 @@ class HoymilesCloud extends IPSModule
             if (!$chart) {
                 continue;
             }
+            $power = [];
+            foreach ($chart['series'] as $series) {
+                if ($series['type'] === 'MODULE_POWER') {
+                    $power = $series['data'];
+                    break;
+                }
+            }
+            $head = [];
+            foreach (array_slice(array_keys($power), 0, 4) as $idx) {
+                $head[] = (string) ($chart['x_axis'][$idx] ?? '?') . '=' . (is_finite((float) $power[$idx]) ? round((float) $power[$idx], 1) : '-');
+            }
             $this->SendDebug('Daily curve', sprintf(
-                '%s: %d axis labels (first "%s", last "%s"), %d values',
+                '%s: %d axis labels (first "%s", last "%s"), %d values, start: %s',
                 $c['name'],
                 count($chart['x_axis']),
                 (string) ($chart['x_axis'][0] ?? ''),
                 (string) (end($chart['x_axis']) ?: ''),
-                count($chart['series'][0]['data'] ?? [])
-            ) . ', first values: ' . implode(' / ', array_map(static function ($v) {
-                return is_finite((float) $v) ? (string) round((float) $v, 1) : '-';
-            }, array_slice($chart['series'][0]['data'] ?? [], 0, 4))), 0);
+                count($power),
+                implode(' | ', $head)
+            ), 0);
             foreach (HoymilesClient::chartPowerSamples($chart, date('Y-m-d'), $lastTs) as $sample) {
                 $minute = (int) date('G', $sample['TimeStamp']) * 60 + (int) date('i', $sample['TimeStamp']);
                 $curve[$minute] = ($curve[$minute] ?? 0) + $sample['Value'];
@@ -825,7 +835,7 @@ class HoymilesCloud extends IPSModule
         }
         ksort($curve);
         // Überbleibsel um Mitternacht auch in der Summe prüfen (falls ein Eingang anders meldet)
-        $curve = array_combine(array_keys($curve), HoymilesClient::withoutCarryOver(array_values($curve)));
+        $curve = array_combine(array_keys($curve), HoymilesClient::withoutCarryOver(array_values($curve), array_keys($curve)));
         $points = [];
         foreach ($curve as $minute => $watt) {
             $points[] = [$minute, (int) round($watt * $scale)];
