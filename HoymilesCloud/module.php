@@ -1418,18 +1418,28 @@ class HoymilesCloud extends IPSModule
         $types = ['jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg', 'png' => 'image/png', 'webp' => 'image/webp', 'gif' => 'image/gif', 'svg' => 'image/svg+xml'];
         $ext = strtolower(pathinfo((string) IPS_GetMedia($media)['MediaFile'], PATHINFO_EXTENSION));
         $mime = $types[$ext] ?? 'image/jpeg';
-        $uri = "data:$mime;base64,$content";
 
+        $uri = '';
+        $problem = '';
         $scaled = self::scaleImage($content, $mime, $maxSize);
-        if ($scaled !== null) {
+        if (isset($scaled['uri'])) {
             $uri = $scaled['uri'];
             $this->SendDebug('Tile', sprintf('image %dx%d scaled to %dx%d (%d kB)', $scaled['from'][0], $scaled['from'][1], $scaled['to'][0], $scaled['to'][1], strlen($uri) * 3 / 4 / 1024), 0);
+        } elseif (isset($scaled['error'])) {
+            $problem = sprintf($this->Translate('Tile image is too large to be scaled down (%d × %d pixels) – please use a smaller image (e.g. max. 2000 pixels wide).'), $scaled['from'][0], $scaled['from'][1]);
+        } else {
+            $uri = "data:$mime;base64,$content"; // klein genug oder nicht verkleinerbar: unverändert
         }
-        if (strlen($uri) > 700 * 1024) {
-            $this->SendDebug('Tile', 'image too large for the tile even after scaling (' . round(strlen($uri) / 1024) . ' kB) – using the illustration. Please use a smaller image (JPEG, max. ~500 kB).', 0);
-            $this->LogMessage($this->Translate('Tile image is too large – please use a smaller image (JPEG, max. approx. 500 kB).'), KL_WARNING);
-            return '';
+        unset($content);
+        if ($problem === '' && strlen($uri) > 700 * 1024) {
+            $problem = $this->Translate('Tile image is too large – please use a smaller image (JPEG, max. approx. 500 kB).');
+            $uri = '';
         }
+        if ($problem !== '') {
+            $this->SendDebug('Tile', $problem . ' – using the illustration', 0);
+            $this->LogMessage($problem, KL_WARNING);
+        }
+        // auch das Scheitern merken, damit nicht bei jedem Öffnen neu gerechnet und gewarnt wird
         $this->SetBuffer('TileImage', json_encode(['key' => $key, 'uri' => $uri]));
         return $uri;
     }
@@ -1444,13 +1454,71 @@ class HoymilesCloud extends IPSModule
         if ($mime === 'image/svg+xml' || $raw === false || !function_exists('imagecreatefromstring')) {
             return null;
         }
+        $info = @getimagesizefromstring($raw);
+        if ($info === false || $info[0] <= 0 || $info[1] <= 0) {
+            return null;
+        }
+        [$w, $h] = $info;
+        if (max($w, $h) <= $maxSize && strlen($raw) <= 400 * 1024) {
+            return null; // schon klein genug
+        }
+        // Entpackt braucht das Bild ca. 5 Byte je Pixel. Symcon erlaubt Skripten meist nur 32 MB –
+        // vorher prüfen (und wenn möglich kurz anheben), statt mit einem Speicherfehler abzubrechen.
+        $scale = min(1.0, $maxSize / max($w, $h));
+        $need = (int) ($w * $h * 5.5 + ($w * $scale) * ($h * $scale) * 5 + strlen($raw) * 2 + 4 * 1024 * 1024);
+        $oldLimit = ini_get('memory_limit');
+        if (!self::ensureMemory($need)) {
+            return ['error' => 'memory', 'from' => [$w, $h]];
+        }
+        try {
+            $result = self::scaleDecoded($raw, $mime, $w, $h, $scale);
+        } finally {
+            if ($oldLimit !== false && function_exists('ini_set') && ini_get('memory_limit') !== $oldLimit) {
+                @ini_set('memory_limit', $oldLimit);
+            }
+        }
+        return $result;
+    }
+
+    /** Ist genug Speicher frei? Falls nicht, wird versucht, die Grenze passend anzuheben. */
+    private static function ensureMemory(int $need): bool
+    {
+        $limit = self::bytes((string) ini_get('memory_limit'));
+        if ($limit < 0) {
+            return true; // unbegrenzt
+        }
+        $used = memory_get_usage(true);
+        if ($limit - $used >= $need) {
+            return true;
+        }
+        $wanted = $used + $need + 8 * 1024 * 1024;
+        if (!function_exists('ini_set') || @ini_set('memory_limit', (string) $wanted) === false) {
+            return false;
+        }
+        return self::bytes((string) ini_get('memory_limit')) >= $wanted;
+    }
+
+    private static function bytes(string $value): int
+    {
+        $value = trim($value);
+        if ($value === '' || $value === '-1') {
+            return -1;
+        }
+        $num = (int) $value;
+        switch (strtolower(substr($value, -1))) {
+            case 'g': return $num * 1024 * 1024 * 1024;
+            case 'm': return $num * 1024 * 1024;
+            case 'k': return $num * 1024;
+        }
+        return $num;
+    }
+
+    private static function scaleDecoded(string $raw, string $mime, int $w, int $h, float $scale): ?array
+    {
         $img = @imagecreatefromstring($raw);
         if ($img === false) {
             return null;
         }
-        $w = imagesx($img);
-        $h = imagesy($img);
-        $scale = min(1.0, $maxSize / max($w, $h, 1));
         $nw = max(1, (int) round($w * $scale));
         $nh = max(1, (int) round($h * $scale));
         $out = imagecreatetruecolor($nw, $nh);
