@@ -1,0 +1,12 @@
+{
+    "id": "{01CC9A54-EA19-4013-8785-B294FDE4D2CA}",
+    "author": "Armin Frohwerk",
+    "name": "Hoymiles Cloud",
+    "url": "https://github.com/Philra94/homeassistant-hoymiles-cloud",
+    "compatibility": {
+        "version": "7.0"
+    },
+    "version": "1.1",
+    "build": 22,
+    "date": 1790553600
+}

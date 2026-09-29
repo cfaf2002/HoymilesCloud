@@ -1,0 +1,591 @@
+<style>
+    /*
+     * Kachel „Hoymiles Cloud“ für die Kachel-Visualisierung von IP-Symcon.
+     * Schrift und Textfarbe kommen von der Visualisierung (hell/dunkel) – alle
+     * Neben- und Linienfarben werden daraus abgeleitet (currentColor), damit die
+     * Kachel in beiden Darstellungen passt.
+     */
+    :root {
+        --solar: #f2a900;
+        --solar-soft: color-mix(in srgb, #f2a900 22%, transparent);
+        --storage: #3987e5;
+        --good: #0ca30c;
+        --critical: #d03b3b;
+        --muted: color-mix(in srgb, currentColor 62%, transparent);
+        --faint: color-mix(in srgb, currentColor 38%, transparent);
+        --track: color-mix(in srgb, currentColor 12%, transparent);
+        --line: color-mix(in srgb, currentColor 14%, transparent);
+    }
+    html, body { height: 100%; }
+    body {
+        margin: 0;
+        overflow: hidden;
+        background: transparent;
+        -webkit-font-smoothing: antialiased;
+    }
+    #hm {
+        box-sizing: border-box;
+        height: 100%;
+        /* oben Platz lassen: dort blendet die Visualisierung Titel und Vollbild-Knopf ein */
+        padding: var(--top-safe, 48px) 14px 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        font-size: 13px;
+        line-height: 1.25;
+    }
+    .hidden { display: none !important; }
+    #hm > * { position: relative; z-index: 1; }
+
+    /* Hintergrund: eigenes Bild (ganze Kachel, abgeblendet) oder Illustration (rechts neben der Kopfzahl) */
+    #bgImg {
+        position: fixed; inset: 0; z-index: 0; pointer-events: none;
+        background-size: cover; background-position: center; opacity: 0.3;
+    }
+    #bgArt {
+        position: fixed; z-index: 0; pointer-events: none;
+        top: calc(var(--top-safe, 48px) + 34px); right: 14px;
+        height: 116px; aspect-ratio: 12 / 7; max-width: 44%;
+    }
+    #bgArt svg { width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.18)); }
+    #bgArt .ground { fill: color-mix(in srgb, currentColor 12%, transparent); }
+    #bgArt .trunk { fill: #7a5a44; }
+    #bgArt .leaf { fill: #4caf50; }
+    #bgArt .leaf2 { fill: #3d9442; }
+    #bgArt .pv { fill: url(#hmPanel); stroke: #cfd8e6; stroke-width: 0.7; }
+    #bgArt .win rect { fill: url(#hmWindow); transition: fill 1.5s; }
+    #bgArt .box { fill: #eef1f5; stroke: #aab3c0; stroke-width: 0.8; }
+    #bgArt .bolt { fill: #3987e5; }
+    #bgArt .flow { fill: none; stroke: #f2a900; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 2 6; opacity: 0; }
+    #bgArt .ray { stroke: #ffb400; stroke-width: 2; stroke-linecap: round; opacity: 0.7; }
+    #bgArt .rays { transform-origin: 206px 26px; animation: hmTurn 40s linear infinite; }
+    #bgArt .sunPulse { transform-origin: 206px 26px; animation: hmGlow 4s ease-in-out infinite; }
+    #bgArt .cloud path { fill: color-mix(in srgb, #ffffff 85%, transparent); stroke: color-mix(in srgb, currentColor 12%, transparent); stroke-width: 0.8; }
+    #bgArt .cloud { animation: hmDrift 26s ease-in-out infinite alternate; }
+    #bgArt .moon { fill: #f3e9c6; stroke: color-mix(in srgb, currentColor 18%, transparent); stroke-width: 0.8; }
+    #bgArt .star { fill: color-mix(in srgb, #ffd966 75%, currentColor); animation: hmTwinkle 3s ease-in-out infinite; }
+    #bgArt .star.s2 { animation-delay: 1s; } #bgArt .star.s3 { animation-delay: 2s; }
+    #bgArt .shine { opacity: 0; }
+    #bgArt .day, #bgArt .night { transition: opacity 1.5s; }
+    #bgArt .night { opacity: 0; }
+    #hm[data-status="night"] #bgArt .day { opacity: 0; }
+    #hm[data-status="night"] #bgArt .night { opacity: 1; }
+    #hm[data-status="night"] #bgArt .win rect { fill: url(#hmWindowLit); }
+    #hm[data-status="producing"] #bgArt .shine { animation: hmShine 6s ease-in-out infinite; }
+    #hm[data-status="producing"] #bgArt .flow { opacity: 0.95; animation: hmFlow 1.2s linear infinite; }
+    #hm[data-status="night"] #bgArt .pv { filter: brightness(0.7); }
+    @keyframes hmTurn { to { transform: rotate(360deg); } }
+    @keyframes hmGlow { 50% { transform: scale(1.12); } }
+    @keyframes hmDrift { from { transform: translateX(-10px); } to { transform: translateX(14px); } }
+    @keyframes hmTwinkle { 50% { opacity: 0.25; } }
+    @keyframes hmShine { 0%, 55% { opacity: 0; transform: translateX(0); } 60% { opacity: 1; } 95% { opacity: 1; } 100% { opacity: 0; transform: translateX(150px); } }
+    @keyframes hmFlow { to { stroke-dashoffset: -16; } }
+    @media (prefers-reduced-motion: reduce) { #bgArt * { animation: none !important; } }
+    @media (max-width: 420px), (max-height: 210px) { #bgArt, #bgPic { display: none; } }
+    @media (max-height: 400px) { #bgArt { height: 100px; top: calc(var(--top-safe, 48px) + 34px); } #bgPic { height: 108px; } }
+
+    /* eigenes Bild an Stelle der Illustration: rechts oben, Ränder weich ausgeblendet */
+    #bgPic {
+        position: fixed; z-index: 0; pointer-events: none;
+        top: calc(var(--top-safe, 48px) + 30px); right: 6px;
+        height: 128px; aspect-ratio: 16 / 10; max-width: 46%;
+        background-size: cover; background-repeat: no-repeat; background-position: center;
+        -webkit-mask-image: radial-gradient(closest-side, #000 58%, transparent 100%);
+        mask-image: radial-gradient(closest-side, #000 58%, transparent 100%);
+        transition: filter 1.5s;
+    }
+    #hm[data-status="night"] #bgPic { filter: brightness(0.55) saturate(0.75); }
+    #hm[data-status="standby"] #bgPic { filter: saturate(0.6); }
+
+    /* Kopfzeile */
+    .head { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 30px; }
+    .title { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pill {
+        display: inline-flex; align-items: center; gap: 5px;
+        padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+        background: var(--track); white-space: nowrap;
+    }
+    .pill svg { width: 12px; height: 12px; }
+    .pill.producing svg { color: var(--solar); }
+    .pill.standby svg, .pill.night svg { color: var(--muted); }
+    .pill.fault { background: color-mix(in srgb, var(--critical) 18%, transparent); }
+    .pill.fault svg { color: var(--critical); }
+    .refresh {
+        border: 0; background: var(--track); color: var(--muted); cursor: pointer;
+        width: 30px; height: 30px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 50%; position: relative; z-index: 2; -webkit-tap-highlight-color: transparent;
+    }
+    .refresh:hover, .refresh:active { color: currentColor; background: color-mix(in srgb, currentColor 20%, transparent); }
+    .refresh svg { width: 15px; height: 15px; }
+    .refresh.spin svg { animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Kopfzahl mit Ring */
+    .hero { display: flex; align-items: center; gap: 14px; }
+    .ring { position: relative; width: 84px; height: 84px; flex: none; }
+    .ring svg { width: 100%; height: 100%; transform: rotate(135deg); }
+    .ring .track { stroke: var(--track); }
+    .ring .fill { stroke: var(--solar); transition: stroke-dashoffset 1.2s ease; }
+    .ring .sun {
+        position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+        color: var(--solar); transition: opacity 0.6s, transform 0.6s;
+    }
+    .ring .sun svg { width: 30px; height: 30px; transform: none; }
+    .ring.off .sun { color: var(--faint); }
+    .glow .sun svg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--solar) 70%, transparent)); animation: pulse 3.2s ease-in-out infinite; }
+    @keyframes pulse { 50% { transform: scale(1.08); } }
+    .figures { min-width: 0; }
+    .power { font-size: 34px; font-weight: 600; letter-spacing: -0.5px; line-height: 1.05; white-space: nowrap; }
+    .power .unit { font-size: 16px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+    .of { font-size: 11px; color: var(--muted); margin-top: 2px; }
+    .kpis { display: flex; gap: 14px; margin-top: 6px; flex-wrap: wrap; }
+    .kpi .v { font-weight: 600; font-size: 14px; white-space: nowrap; }
+    .kpi .l { font-size: 11px; color: var(--muted); }
+
+    /* Tagesverlauf */
+    .curve { position: relative; flex: 1 1 60px; min-height: 48px; }
+    .curve svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+    .curve .area { fill: var(--solar-soft); }
+    .curve .stroke { fill: none; stroke: var(--solar); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+    .curve .base { stroke: var(--line); stroke-width: 1; }
+    .curve .now { fill: var(--solar); stroke: var(--bg-ring, transparent); }
+    .curve .cross { stroke: var(--faint); stroke-width: 1; }
+    .curve .axis { font-size: 10px; fill: var(--faint); }
+    .tip {
+        position: absolute; top: -4px; transform: translate(-50%, -100%);
+        padding: 3px 7px; border-radius: 6px; font-size: 11px; white-space: nowrap;
+        background: color-mix(in srgb, currentColor 88%, transparent); pointer-events: none;
+    }
+    .tip span { filter: invert(1); }
+    .curve-empty { font-size: 11px; color: var(--faint); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+
+    /* PV-Eingänge */
+    .inputs { display: grid; gap: 5px; }
+    .in { display: grid; grid-template-columns: 50px 1fr auto; align-items: center; gap: 8px; font-size: 12px; }
+    .in .n { color: var(--muted); display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+    .in .n svg { width: 12px; height: 12px; color: var(--storage); flex: none; }
+    .bar { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; }
+    .bar i { display: block; height: 100%; border-radius: 4px; background: var(--solar); width: 0; transition: width 1.2s ease; }
+    .in.storage .bar i { background: var(--storage); }
+    .in.weak .n { color: var(--critical); }
+    .in .w { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .in .w b { font-weight: 600; }
+    .in .w small { color: var(--muted); margin-left: 6px; }
+
+    /* Fußzeile */
+    .foot { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 6px; }
+    .foot b { color: currentColor; font-weight: 600; }
+    .foot .q { opacity: 0.8; }
+    @media (max-width: 330px) { .foot .q { display: none; } }
+    .alarm {
+        display: flex; gap: 6px; align-items: flex-start; font-size: 12px;
+        padding: 6px 8px; border-radius: 8px; background: color-mix(in srgb, var(--critical) 14%, transparent);
+    }
+    #alarmText { white-space: pre-line; }
+    .alarm svg { width: 14px; height: 14px; color: var(--critical); flex: none; margin-top: 1px; }
+    .empty { margin: auto; text-align: center; color: var(--muted); font-size: 12px; }
+
+    /* Kleine Kacheln: nur das Wichtigste */
+    /* mittlere Höhe: kompakter, bei Störung weicht der Tagesverlauf der Meldung */
+    @media (max-height: 400px) {
+        #hm { gap: 6px; }
+        .ring { width: 70px; height: 70px; }
+        .ring .sun svg { width: 26px; height: 26px; }
+        .power { font-size: 30px; }
+        .kpis { margin-top: 4px; }
+        .inputs { gap: 3px; }
+        .in { font-size: 11.5px; }
+        .alarm { padding: 4px 8px; }
+        .alarm span { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+        .curve { min-height: 36px; }
+    }
+    @media (max-height: 300px) { .curve { display: none !important; } }
+    /* sehr knapp mit Störungsmeldung: Tagesverlauf weglassen, damit nichts abgeschnitten wird */
+    @media (max-height: 350px) { #hm:has(.alarm:not(.hidden)) .curve { display: none !important; } }
+    /* flache Kacheln: nur Kopfzahl, Störung zeigt die Statusanzeige */
+    @media (max-height: 210px) {
+        #hm { --top-safe: 40px; }
+        .curve, .inputs, .foot, .alarm, .of { display: none !important; }
+        .hero { flex: 1; }
+    }
+    @media (max-width: 240px) {
+        .title { display: none; }
+        .ring { width: 60px; height: 60px; }
+        .ring .sun svg { width: 22px; height: 22px; }
+        .power { font-size: 26px; }
+        .hero { gap: 10px; }
+        .title small, .of, .kpi.saved, .foot .mid { display: none; }
+        .in { grid-template-columns: 40px 1fr auto; }
+        .in .w small { display: none; }
+    }
+    @media (max-width: 170px) {
+        .ring { display: none; }
+        .pill .txt { display: none; }
+    }
+</style>
+
+<div id="hm" data-status="standby">
+    <div id="bgImg" class="hidden"></div>
+    <div id="bgPic" class="hidden" aria-hidden="true"></div>
+    <div id="bgArt" class="hidden" aria-hidden="true">
+        <svg viewBox="0 0 240 140">
+            <defs>
+                <radialGradient id="hmSunGlow"><stop offset="0" stop-color="#ffcf4a" stop-opacity="0.55"/><stop offset="1" stop-color="#ffcf4a" stop-opacity="0"/></radialGradient>
+                <radialGradient id="hmSunCore" cx="0.4" cy="0.35"><stop offset="0" stop-color="#fff3b0"/><stop offset="0.6" stop-color="#ffc233"/><stop offset="1" stop-color="#f29a00"/></radialGradient>
+                <linearGradient id="hmRoof" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#586174"/><stop offset="1" stop-color="#2c313d"/></linearGradient>
+                <linearGradient id="hmWall" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f4f1ea"/><stop offset="1" stop-color="#d6d2c8"/></linearGradient>
+                <linearGradient id="hmWallSide" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c9c4b8"/><stop offset="1" stop-color="#b3ad9f"/></linearGradient>
+                <linearGradient id="hmPanel" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3a78e0"/><stop offset="0.55" stop-color="#1c4aa8"/><stop offset="1" stop-color="#10306e"/></linearGradient>
+                <linearGradient id="hmWindow" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bcd8f5"/><stop offset="1" stop-color="#8fb6e3"/></linearGradient>
+                <linearGradient id="hmWindowLit" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe7a8"/><stop offset="1" stop-color="#ffb347"/></linearGradient>
+                <linearGradient id="hmShine" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="0.5" stop-color="#fff" stop-opacity="0.75"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+                <clipPath id="hmPanelClip"><polygon points="91.3,49.8 159.4,49.8 172.6,75.0 72.6,75.0"/></clipPath>
+            </defs>
+
+            <!-- Himmel: Sonne und Wolke am Tag, Mond und Sterne in der Nacht -->
+            <g class="day">
+                <circle cx="206" cy="26" r="30" fill="url(#hmSunGlow)" class="sunPulse"/>
+                <g class="rays">
+                    <line class="ray" x1="206" y1="3" x2="206" y2="8"/><line class="ray" x1="206" y1="44" x2="206" y2="49"/>
+                    <line class="ray" x1="183" y1="26" x2="188" y2="26"/><line class="ray" x1="224" y1="26" x2="229" y2="26"/>
+                    <line class="ray" x1="190" y1="10" x2="193" y2="13"/><line class="ray" x1="219" y1="39" x2="222" y2="42"/>
+                    <line class="ray" x1="190" y1="42" x2="193" y2="39"/><line class="ray" x1="219" y1="13" x2="222" y2="10"/>
+                </g>
+                <circle cx="206" cy="26" r="11" fill="url(#hmSunCore)"/>
+                <g class="cloud"><path transform="translate(-92 -14)" d="M150 30a7 7 0 0 1 12-5a9 9 0 0 1 16 4a6 6 0 0 1 1 12h-27a6 6 0 0 1-2-11z"/></g>
+            </g>
+            <g class="night">
+                <path class="moon" d="M214 12a15 15 0 1 0 11 23a12 12 0 1 1-11-23z"/>
+                <circle class="star s1" cx="170" cy="12" r="1.5"/><circle class="star s2" cx="232" cy="52" r="1.2"/>
+                <circle class="star s3" cx="186" cy="40" r="1"/><circle class="star s1" cx="150" cy="24" r="1.2"/>
+                <circle class="star s2" cx="196" cy="6" r="1"/>
+            </g>
+
+            <!-- Boden und Baum -->
+            <ellipse cx="124" cy="136" rx="104" ry="4.5" class="ground"/>
+            <rect x="24" y="112" width="4" height="22" rx="1.5" class="trunk"/>
+            <circle cx="26" cy="104" r="13" class="leaf"/><circle cx="18" cy="112" r="8" class="leaf2"/><circle cx="34" cy="111" r="9" class="leaf2"/>
+
+            <!-- Haus -->
+            <rect x="148" y="30" width="10" height="18" rx="1" fill="#6b6f78"/><rect x="146" y="28" width="14" height="4" rx="1" fill="#555a63"/>
+            <polygon points="182,80 196,82 196,134 182,134" fill="url(#hmWallSide)"/>
+            <rect x="58" y="80" width="124" height="54" fill="url(#hmWall)"/>
+            <polygon points="46,82 82,42 170,42 196,82" fill="url(#hmRoof)"/>
+            <polygon points="44,82 198,82 196,86 46,86" fill="#23272f" opacity="0.55"/>
+            <line x1="82" y1="42" x2="170" y2="42" stroke="#8a93a6" stroke-width="1.5" stroke-linecap="round"/>
+
+            <!-- Solarmodule mit Lichtreflex -->
+            <g class="panels">
+                <polygon class="pv" points="91.3,49.8 107.1,49.8 101.9,61.3 82.7,61.3"/>
+                <polygon class="pv" points="108.7,49.8 124.6,49.8 123.1,61.3 103.9,61.3"/>
+                <polygon class="pv" points="126.2,49.8 142.0,49.8 144.3,61.3 125.1,61.3"/>
+                <polygon class="pv" points="143.6,49.8 159.4,49.8 165.4,61.3 146.2,61.3"/>
+                <polygon class="pv" points="81.1,63.4 101.0,63.4 95.8,75.0 72.6,75.0"/>
+                <polygon class="pv" points="103.0,63.4 122.8,63.4 121.4,75.0 98.1,75.0"/>
+                <polygon class="pv" points="124.9,63.4 144.7,63.4 147.0,75.0 123.7,75.0"/>
+                <polygon class="pv" points="146.7,63.4 166.6,63.4 172.6,75.0 149.3,75.0"/>
+                <g clip-path="url(#hmPanelClip)"><g class="shine"><rect x="40" y="40" width="22" height="45" fill="url(#hmShine)" transform="skewX(-25)"/></g></g>
+            </g>
+
+            <!-- Fenster und Tür -->
+            <rect x="72" y="100" width="16" height="34" rx="2" fill="#7a5a44"/><circle cx="84" cy="118" r="1.2" fill="#e8c27a"/>
+            <g class="win"><rect x="102" y="96" width="22" height="18" rx="2"/><rect x="138" y="96" width="22" height="18" rx="2"/></g>
+            <g stroke="#f4f1ea" stroke-width="1.4"><line x1="113" y1="96" x2="113" y2="114"/><line x1="102" y1="105" x2="124" y2="105"/><line x1="149" y1="96" x2="149" y2="114"/><line x1="138" y1="105" x2="160" y2="105"/></g>
+
+            <!-- Speicher an der Hauswand und Energiefluss vom Dach -->
+            <rect x="200" y="106" width="16" height="26" rx="3" class="box"/>
+            <path d="M209 111l-4 8h4l-2 7l6-9h-4l2-6z" class="bolt"/>
+            <path class="flow" d="M178 80 C 190 86, 206 90, 208 106"/>
+        </svg>
+    </div>
+    <div class="head">
+        <div class="title" id="title">Hoymiles</div>
+        <span class="pill standby" id="pill"><span id="pillIcon"></span><span class="txt" id="pillText"></span></span>
+        <button class="refresh" id="refresh" title="Update now" onclick="hmRefresh()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+        </button>
+    </div>
+
+    <div class="alarm hidden" id="alarm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+        <span id="alarmText"></span>
+    </div>
+
+    <div class="hero" id="hero">
+        <div class="ring" id="ring">
+            <svg viewBox="0 0 100 100">
+                <circle class="track" cx="50" cy="50" r="42" fill="none" stroke-width="9" stroke-linecap="round" stroke-dasharray="197.9 263.9"/>
+                <circle class="fill" id="ringFill" cx="50" cy="50" r="42" fill="none" stroke-width="9" stroke-linecap="round" stroke-dasharray="197.9 263.9" stroke-dashoffset="197.9"/>
+            </svg>
+            <div class="sun" id="sunIcon"></div>
+        </div>
+        <div class="figures">
+            <div class="power"><span id="power">–</span><span class="unit">W</span></div>
+            <div class="of" id="of"></div>
+            <div class="kpis">
+                <div class="kpi"><div class="v" id="today">–</div><div class="l" id="todayL"></div></div>
+                <div class="kpi saved" id="savedBox"><div class="v" id="saved">–</div><div class="l" id="savedL"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="curve" id="curve">
+        <svg id="curveSvg" preserveAspectRatio="none"></svg>
+        <div class="tip hidden" id="tip"><span id="tipText"></span></div>
+        <div class="curve-empty hidden" id="curveEmpty"></div>
+    </div>
+
+    <div class="inputs" id="inputs"></div>
+
+    <div class="foot" id="foot">
+        <span id="fMonth"></span><span class="mid" id="fYear"></span><span id="fTotal"></span>
+    </div>
+
+    <div class="empty hidden" id="empty"></div>
+</div>
+
+<script>
+    const HM_ICONS = {
+        sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2" fill="currentColor"/><path d="M12 2v2.2M12 19.8V22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M2 12h2.2M19.8 12H22M4.9 19.1l1.6-1.6M17.5 6.5l1.6-1.6"/></svg>',
+        moon: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M20.5 14.2A8.5 8.5 0 0 1 9.8 3.5a8.5 8.5 0 1 0 10.7 10.7z"/></svg>',
+        pause: '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>',
+        warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 7v6"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg>',
+        battery: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="7" width="16" height="10" rx="2"/><path d="M22 11v2"/><path d="M7 10v4M11 10v4" stroke-linecap="round"/></svg>'
+    };
+    let hmState = null;
+
+    function hmNum(value, digits) {
+        return Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    }
+    function hmKWh(value) {
+        const v = Number(value || 0);
+        return v >= 1000 ? hmNum(v / 1000, 2) + ' MWh' : hmNum(v, v >= 100 ? 0 : v >= 10 ? 1 : 2) + ' kWh';
+    }
+    function hmSet(id, text) { document.getElementById(id).textContent = text; }
+    function hmShow(id, show) { document.getElementById(id).classList.toggle('hidden', !show); }
+    function hmAgo(ts, L) {
+        if (!ts) { return ''; }
+        const min = Math.max(0, Math.round((Date.now() / 1000 - ts) / 60));
+        if (min < 1) { return L.justNow; }
+        if (min < 60) { return L.minAgo.replace('%d', min); }
+        return new Date(ts * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    }
+    function hmClock(minutes) {
+        const h = Math.floor(minutes / 60), m = Math.round(minutes % 60);
+        return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+    }
+
+    let hmRefreshAt = 0;
+    function hmRefresh() {
+        hmRefreshAt = Date.now() / 1000;
+        document.getElementById('refresh').classList.add('spin');
+        requestAction('Refresh', true);
+        setTimeout(() => document.getElementById('refresh').classList.remove('spin'), 8000);
+    }
+
+    function hmApplyBackground(bg) {
+        const img = document.getElementById('bgImg'), pic = document.getElementById('bgPic');
+        hmShow('bgArt', bg.mode === 'illustration');
+        hmShow('bgImg', bg.mode === 'image' && !!bg.image);
+        hmShow('bgPic', bg.mode === 'picture' && !!bg.image);
+        img.style.backgroundImage = bg.mode === 'image' && bg.image ? 'url("' + bg.image + '")' : '';
+        img.style.opacity = String(bg.opacity);
+        pic.style.backgroundImage = bg.mode === 'picture' && bg.image ? 'url("' + bg.image + '")' : '';
+    }
+
+    function handleMessage(data) {
+        const s = typeof data === 'string' ? JSON.parse(data) : data;
+        if (s.background) {
+            hmApplyBackground(s.background);
+        }
+        if (s.configured === undefined) {
+            return; // reine Hintergrund-Nachricht
+        }
+        hmState = s;
+        document.getElementById('hm').dataset.status = s.status;
+        const L = s.labels;
+        if (!s.lastUpdate || s.lastUpdate >= hmRefreshAt - 2) {
+            document.getElementById('refresh').classList.remove('spin'); // nicht bei einer reinen Synchronisation
+        }
+        document.getElementById('refresh').title = L.refresh;
+
+        const ready = !!s.configured;
+        ['hero', 'curve', 'inputs', 'foot'].forEach(id => hmShow(id, ready));
+        hmShow('empty', !ready);
+        hmSet('empty', L.notConfigured);
+
+        // Kopfzeile
+        hmSet('title', [s.name, s.model].filter(Boolean).join(' · '));
+        const pill = document.getElementById('pill');
+        pill.className = 'pill ' + s.status;
+        document.getElementById('pillIcon').innerHTML =
+            s.status === 'fault' ? HM_ICONS.warn : s.status === 'night' ? HM_ICONS.moon : s.status === 'producing' ? HM_ICONS.sun : HM_ICONS.pause;
+        hmSet('pillText', s.statusText);
+
+        // Störung
+        hmShow('alarm', !!s.alarm);
+        hmSet('alarmText', s.alarm || '');
+        if (!ready) { return; }
+
+        // Kopfzahl und Ring (Anteil an der Nennleistung)
+        const share = s.pmax > 0 ? Math.max(0, Math.min(1, s.power / s.pmax)) : 0;
+        document.getElementById('ringFill').style.strokeDashoffset = (197.9 * (1 - share)).toFixed(1);
+        document.getElementById('sunIcon').innerHTML = s.status === 'night' ? HM_ICONS.moon : HM_ICONS.sun;
+        const ring = document.getElementById('ring');
+        ring.classList.toggle('off', s.power <= 0);
+        ring.classList.toggle('glow', s.power > 0);
+        hmSet('power', hmNum(s.power, 0));
+        hmSet('of', s.pmax > 0 ? L.ofRated.replace('%s', hmNum(share * 100, 0)).replace('%p', hmNum(s.pmax, 0)) : '');
+        hmSet('today', hmKWh(s.today));
+        hmSet('todayL', L.today);
+        hmShow('savedBox', s.savingsToday !== null);
+        if (s.savingsToday !== null) {
+            hmSet('saved', hmNum(s.savingsToday, 2) + ' €');
+            hmSet('savedL', L.saved);
+        }
+
+        // PV-Eingänge
+        const box = document.getElementById('inputs');
+        box.innerHTML = '';
+        s.inputs.forEach(inp => {
+            const row = document.createElement('div');
+            row.className = 'in ' + inp.source + (inp.weak ? ' weak' : '');
+            const name = document.createElement('div');
+            name.className = 'n';
+            if (inp.source === 'storage') { name.innerHTML = HM_ICONS.battery; }
+            name.append(document.createTextNode(inp.name));
+            name.title = inp.source === 'storage' ? L.storage : L.panel;
+            const bar = document.createElement('div');
+            bar.className = 'bar';
+            const fill = document.createElement('i');
+            bar.append(fill);
+            const val = document.createElement('div');
+            val.className = 'w';
+            val.innerHTML = '<b></b> W<small></small>';
+            val.querySelector('b').textContent = hmNum(inp.power, 0);
+            val.querySelector('small').textContent = hmKWh(inp.energy);
+            row.title = inp.name + ': ' + hmNum(inp.power, 0) + ' W · ' + hmNum(inp.voltage, 1) + ' V · ' + hmNum(inp.current, 2) + ' A';
+            row.append(name, bar, val);
+            box.append(row);
+            requestAnimationFrame(() => {
+                fill.style.width = (inp.max > 0 ? Math.min(100, inp.power / inp.max * 100) : 0).toFixed(1) + '%';
+            });
+        });
+
+        // Fußzeile
+        document.getElementById('fMonth').innerHTML = '';
+        document.getElementById('fMonth').append(L.month + ' ', Object.assign(document.createElement('b'), { textContent: hmKWh(s.month) }));
+        document.getElementById('fYear').innerHTML = '';
+        document.getElementById('fYear').append(L.year + ' ', Object.assign(document.createElement('b'), { textContent: hmKWh(s.year) }));
+        hmFooterTime();
+
+        hmDrawCurve();
+    }
+
+    // Tagesverlauf als Fläche, mit Fadenkreuz und Tooltip
+    function hmDrawCurve() {
+        const s = hmState;
+        if (!s || !s.configured) { return; }
+        const svg = document.getElementById('curveSvg');
+        const box = document.getElementById('curve');
+        const w = box.clientWidth, h = box.clientHeight;
+        svg.setAttribute('viewBox', '0 0 ' + w + ' ' + h);
+        svg.innerHTML = '';
+        const pts = (s.curve || []).filter(p => p[1] >= 0);
+        const hasData = pts.some(p => p[1] > 0);
+        hmShow('curveEmpty', !hasData);
+        hmSet('curveEmpty', s.labels.noCurve);
+        if (!hasData || w < 40 || h < 30) { return; }
+
+        const first = pts.find(p => p[1] > 0)[0], last = [...pts].reverse().find(p => p[1] > 0)[0];
+        const x0 = Math.max(0, Math.min(first - 30, 6 * 60)), x1 = Math.max(last + 30, 20 * 60);
+        // nur den sichtbaren Bereich zeichnen (die Cloud liefert auch die Nullwerte ab Mitternacht)
+        const inRange = pts.filter(p => p[0] >= x0 && p[0] <= x1);
+        pts.length = 0;
+        inRange.forEach(p => pts.push(p));
+        const peak = Math.max(...pts.map(p => p[1]), 1);
+        const top = 4, bottom = h - 14;
+        const X = m => (m - x0) / (x1 - x0) * w;
+        const Y = v => bottom - v / peak * (bottom - top);
+        const ns = 'http://www.w3.org/2000/svg';
+        const el = (tag, attrs) => { const e = document.createElementNS(ns, tag); for (const k in attrs) { e.setAttribute(k, attrs[k]); } svg.append(e); return e; };
+
+        const line = pts.map((p, i) => (i ? 'L' : 'M') + X(p[0]).toFixed(1) + ' ' + Y(p[1]).toFixed(1)).join(' ');
+        el('path', { d: line + ' L' + X(pts[pts.length - 1][0]).toFixed(1) + ' ' + bottom + ' L' + X(pts[0][0]).toFixed(1) + ' ' + bottom + ' Z', class: 'area' });
+        el('line', { x1: 0, x2: w, y1: bottom, y2: bottom, class: 'base' });
+        el('path', { d: line, class: 'stroke' });
+        [6, 12, 18].forEach(hr => {
+            const x = X(hr * 60);
+            if (x > 14 && x < w - 14) {
+                const t = el('text', { x: x, y: h - 1, 'text-anchor': 'middle', class: 'axis' });
+                t.textContent = hr + ':00';
+            }
+        });
+        const lastPt = pts[pts.length - 1];
+        el('circle', { cx: X(lastPt[0]), cy: Y(lastPt[1]), r: 4, class: 'now' });
+
+        // Hover / Touch: Fadenkreuz und Wert
+        const cross = el('line', { y1: top, y2: bottom, class: 'cross', visibility: 'hidden' });
+        const dot = el('circle', { r: 4, class: 'now', visibility: 'hidden' });
+        const tip = document.getElementById('tip');
+        const move = ev => {
+            const r = svg.getBoundingClientRect();
+            const mx = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+            const minute = x0 + mx / w * (x1 - x0);
+            let best = pts[0];
+            pts.forEach(p => { if (Math.abs(p[0] - minute) < Math.abs(best[0] - minute)) { best = p; } });
+            const bx = X(best[0]), by = Y(best[1]);
+            cross.setAttribute('x1', bx); cross.setAttribute('x2', bx); cross.setAttribute('visibility', 'visible');
+            dot.setAttribute('cx', bx); dot.setAttribute('cy', by); dot.setAttribute('visibility', 'visible');
+            tip.style.left = Math.max(40, Math.min(w - 40, bx)) + 'px';
+            hmSet('tipText', hmClock(best[0]) + ' · ' + hmNum(best[1], 0) + ' W');
+            tip.classList.remove('hidden');
+        };
+        const leave = () => { cross.setAttribute('visibility', 'hidden'); dot.setAttribute('visibility', 'hidden'); tip.classList.add('hidden'); };
+        svg.onpointermove = move; svg.onpointerdown = move; svg.onpointerleave = leave; svg.ontouchend = leave;
+    }
+
+    function hmTime(ts) {
+        return ts ? new Date(ts * 1000).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '–';
+    }
+    function hmFooterTime() {
+        if (!hmState || !hmState.configured) { return; }
+        const s = hmState, L = s.labels, el = document.getElementById('fTotal');
+        el.textContent = L.dataTime + ' ' + hmAgo(s.dataTime, L);
+        if (s.lastUpdate) {
+            el.append(Object.assign(document.createElement('span'), { className: 'q', textContent: ' · ' + L.queried + ' ' + hmTime(s.lastUpdate) }));
+        }
+        el.title = L.cloudTime + ' ' + hmTime(s.dataTime) + '\n' + L.lastQuery + ': ' + hmTime(s.lastUpdate)
+            + (s.nextUpdate ? '\n' + L.nextQuery + ': ' + hmTime(s.nextUpdate) : '');
+    }
+
+    // Kachel wieder sichtbar (App aus dem Hintergrund, Seite gewechselt, Kachel geöffnet):
+    // aktuellen Stand beim Modul anfordern. Nachrichten, die in der Zwischenzeit verloren
+    // gingen, werden so nachgeholt. Das fragt nicht die Cloud ab, sondern nur das Modul.
+    // Ist der letzte Abruf älter als eine Minute, wird wie beim Aktualisieren-Knopf
+    // gleich die Cloud abgefragt; sonst genügt der Stand des Moduls.
+    let hmSyncAt = 0;
+    function hmSync() {
+        if (document.visibilityState === 'hidden' || Date.now() - hmSyncAt < 15000) { return; }
+        hmSyncAt = Date.now();
+        const stale = !hmState || !hmState.lastUpdate || Date.now() / 1000 - hmState.lastUpdate > 60;
+        try {
+            if (stale && hmState && hmState.configured && hmState.status !== 'night') {
+                hmRefresh();
+            } else {
+                requestAction('Sync', true);
+            }
+        } catch (e) { /* ältere Visualisierung */ }
+    }
+    document.addEventListener('visibilitychange', hmSync);
+    window.addEventListener('focus', hmSync);
+    window.addEventListener('pageshow', hmSync);
+    setTimeout(hmSync, 500);
+
+    window.addEventListener('resize', hmDrawCurve);
+    setInterval(() => {
+        hmFooterTime();
+        // Seit dem geplanten Abruf ist über eine Minute nichts gekommen? Dann nachfragen.
+        if (hmState && hmState.nextUpdate && Date.now() / 1000 > hmState.nextUpdate + 60) { hmSync(); }
+    }, 30000);
+</script>

@@ -1,0 +1,3 @@
+tests/stubs/
+.phpunit.result.cache
+.phpunit.cache/
