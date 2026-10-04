@@ -3,6 +3,11 @@
 declare(strict_types=1);
 
 /*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Armin Frohwerk
+ */
+
+/*
  * Nachgebaute Hoymiles-Cloud für die automatisierten Tests (php -S … server.php).
  * Das Verhalten lässt sich über Dateien im Verzeichnis HOYMILES_FAKE_STATE steuern:
  *   offset     – Alter von data_time in Sekunden (Standard 120)

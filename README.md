@@ -1,10 +1,20 @@
 # Hoymiles Cloud für IP-Symcon
 
+[![Version](https://img.shields.io/badge/Version-1.1%20%C2%B7%20Build%2023-2ea44f)](library.json)
+[![IP-Symcon](https://img.shields.io/badge/IP--Symcon-ab%208.1-1f6feb)](https://www.symcon.de)
+[![Symcon 9.0](https://img.shields.io/badge/optimiert%20f%C3%BCr-Symcon%209.0-0aa5a5)](https://www.symcon.de/de/service/dokumentation/installation/migrationen/v81-v90-q1-2026/)
+[![Kachel](https://img.shields.io/badge/Kachel--Visualisierung-HTML--SDK-f2a900)](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/html-sdk/)
+[![PHP](https://img.shields.io/badge/PHP-8.x%20(inkl.%208.5)-777bb4?logo=php&logoColor=white)](https://www.php.net)
+[![Hoymiles](https://img.shields.io/badge/Hoymiles-S--Miles%20Cloud-e2001a)](https://global.hoymiles.com)
+[![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-yellow)](LICENSE)
+[![Tests](https://github.com/cfaf2002/HoymilesCloud/actions/workflows/tests.yml/badge.svg)](https://github.com/cfaf2002/HoymilesCloud/actions/workflows/tests.yml)
+[![Letzter Commit](https://img.shields.io/github/last-commit/cfaf2002/HoymilesCloud)](https://github.com/cfaf2002/HoymilesCloud/commits)
+
 Dieses Modul holt die Daten eines Hoymiles-Mikrowechselrichters (z. B. **HMS-1800-4T**) aus der **Hoymiles S-Miles Cloud** und stellt sie in IP-Symcon als Variablen bereit – Leistung, Erträge, die Werte jedes einzelnen Solarmoduls, Störungsmeldungen und die Ersparnis in Euro.
 
 Das Modul braucht keinen direkten Zugriff auf den Wechselrichter oder die DTU im Heimnetz. Es nutzt dieselben Zugangsdaten wie die S-Miles-App auf dem Handy. Das ist besonders dann praktisch, wenn eine lokale Anbindung (z. B. über OpenDTU) nicht oder nicht mehr funktioniert.
 
-Version 1.1 · ab IP-Symcon 7.0 · Oberfläche Deutsch und Englisch · Lizenz MIT
+Version 1.1 · IP-Symcon 8.1 bis 9.0 (optimiert für 9.0) · Oberfläche Deutsch und Englisch · Lizenz MIT
 
 ---
 
@@ -55,9 +65,10 @@ Version 1.1 · ab IP-Symcon 7.0 · Oberfläche Deutsch und Englisch · Lizenz MI
 
 | Was | Details |
 |-----|---------|
-| IP-Symcon | Version 7.0 oder neuer |
+| IP-Symcon | Version 8.1 oder neuer, empfohlen 9.0. Das Antippen von Werten in der Kachel (`openObject`) gibt es ab 8.2. Wer noch Symcon 7.x nutzt, bleibt bei Build 22. |
 | Hoymiles-Konto | Die Anlage muss in der S-Miles Cloud bzw. App angelegt sein. Benötigt werden Benutzername (meist die E-Mail-Adresse) und Passwort. |
 | Internet | Symcon muss `neapi.hoymiles.com` und `euapi.hoymiles.com` per HTTPS erreichen können. |
+| PHP-Erweiterung `gd` | Nur für ein eigenes Bild in der Kachel (wird automatisch verkleinert). Ist bei Symcon normalerweise dabei. |
 | PHP-Erweiterung `sodium` | Wird für die sichere Anmeldung benötigt. Fehlt sie, zeigt „Verbindung testen“ eine entsprechende Meldung. |
 | optional | Helligkeitssensor in Symcon (für Nachtmodus und Warnung „hell, aber kaum Leistung“), Standort in der Instanz „Location“, WebFront oder Kachel-Visualisierung für Push-Nachrichten |
 
@@ -272,6 +283,8 @@ Jede Variable hat eine feste Kennung (Ident), die sich auch beim Umbenennen nich
 
 Beispiel: `GetValue(IPS_GetObjectIDByIdent('PV1_Power', 12345))` liefert die Leistung von Eingang 1 der Instanz mit der ID 12345.
 
+**Darstellungen statt Profile:** Seit Build 23 nutzen alle Variablen die **Darstellungen** von Symcon (Einheit, Nachkommastellen, Icon, Farbe für „Störung“) statt eigener Variablenprofile. Beim Update werden bestehende Variablen automatisch umgestellt; die alten Profile `HOYM.*` löscht das Modul, sobald keine Variable sie mehr verwendet. Eigene Anpassungen an einer Variable (benutzerdefinierte Darstellung) bleiben unberührt.
+
 ## 7. So kommen die Werte zustande
 
 Damit die Zahlen richtig eingeordnet werden können, hier kurz der Ablauf:
@@ -417,7 +430,7 @@ Hinweis: Bei Konten der „S-Miles Home“-App kann die Cloud Steuerbefehle able
 
 ## 12. Kachel für die Visualisierung
 
-Das Modul bringt eine eigene Kachel für die **Kachel-Visualisierung** von Symcon mit (ab Symcon 7.1). Sie erscheint automatisch, sobald die Hoymiles-Instanz in die Visualisierung gezogen wird – es muss nichts eingerichtet werden.
+Das Modul bringt eine eigene Kachel für die **Kachel-Visualisierung** von Symcon mit. Sie erscheint automatisch, sobald die Hoymiles-Instanz in die Visualisierung gezogen wird – es muss nichts eingerichtet werden.
 
 **Was die Kachel zeigt:**
 
@@ -445,6 +458,21 @@ Das Modul bringt eine eigene Kachel für die **Kachel-Visualisierung** von Symco
 **Einstellung:** Die Nennleistung für den Ring nimmt das Modul aus dem Modellnamen (HMS-1800-4T → 1.800 W). Bei einem auf 800 W begrenzten Balkonkraftwerk bietet es sich an, unter **Kachel → Nennleistung für den Ring** 800 W einzutragen – dann ist der Ring bei voller Einspeisung auch voll.
 
 Der Tagesverlauf wird alle 15 Minuten aus der Cloud neu berechnet und dazwischen mit dem aktuellen Wert ergänzt.
+
+### Kachelschema und Symcon-Design
+
+Die Kachel richtet sich nach dem **Design der Visualisierung**. Symcon stellt Schrift-, Akzent- und Kartenfarbe als CSS-Variablen bereit (`--content-color`, `--accent-color`, `--card-color`); die Kachel übernimmt Schrift- und Hintergrundfarbe daraus und leitet alle Linien und Nebenfarben davon ab. Sie passt so zu hellen und dunklen Designs.
+
+Unter **Kachel → Farben** gibt es zwei Farbschemas:
+
+| Farben | Wirkung |
+|--------|---------|
+| **Sonnengelb (klassisch)** | Leistung, Ring, Tagesverlauf und Balken in Sonnengelb – wie bisher. Standard. |
+| **Symcon-Design** | Diese Elemente nehmen die **Akzentfarbe** deines Designs an. |
+
+Speicher-Eingänge sind in beiden Schemas schraffiert, damit sie auch bei einer blauen Akzentfarbe erkennbar bleiben.
+
+**Antippen öffnet die Variable** (ab Symcon 8.2): Leistung, Ertrag heute, Ersparnis, Monat, Jahr, die Störungsmeldung und jede PV-Zeile öffnen die zugehörige Variable – mit Verlauf, sofern sie archiviert wird. In älteren Versionen bleibt die Kachel wie bisher.
 
 ## 13. Verlauf nachladen
 
@@ -545,7 +573,11 @@ echo 'Schwächster Eingang heute: ' . array_key_first($ertraege) . ' mit ' . res
 - Es werden **keine Daten an Dritte** geschickt – nur an Hoymiles. Push-Nachrichten laufen über deine eigene Symcon-Visualisierung.
 - Das **Passwort wird nicht im Klartext übertragen.** Es wird vorher mit einem aufwendigen Verfahren (Argon2id) umgerechnet, zusammen mit einem Einmal-Code, den der Server bei jeder Anmeldung neu vergibt. Wer den Datenverkehr mitschneidet, kann damit nichts anfangen.
 - Die unsichere **Legacy-Anmeldung** (einfacher MD5-Wert, ohne Einmal-Code) wird nie automatisch verwendet, sondern nur, wenn sie ausdrücklich ausgewählt ist.
-- Im **Debug-Fenster** werden Anmeldedaten und Token ausgeblendet.
+- Im **Debug-Fenster** und in Fehlermeldungen werden Anmeldedaten und Token geschwärzt – auch, wenn eine Antwort abgeschnitten ist. Bei einer fehlerhaften Anmelde-Antwort landet gar nichts aus der Antwort in der Meldung.
+- **Begrenzte Antworten:** Antworten der Cloud sind auf 8 MB begrenzt (auch nach dem Entpacken), der Tagesverlauf wird beim Einlesen auf Plausibilität geprüft. Fehlerhafte oder manipulierte Daten führen zu einer Fehlermeldung statt zu einem Absturz.
+- **Kein Dauerfeuer auf das Konto:** Über die Kachel oder `RequestAction` wird höchstens alle 30 Sekunden abgefragt. Nach einer abgelehnten Anmeldung wartet das Modul 15 Minuten, dann 30, 60 … bis höchstens 6 Stunden, damit das Hoymiles-Konto nicht gesperrt wird. „Übernehmen“ oder „Verbindung testen“ starten sofort einen neuen Versuch.
+- Zwei Abrufe laufen **nie gleichzeitig** (z. B. Timer und Kachel), damit sich Token und Zwischenstände nicht gegenseitig überschreiben.
+- Texte aus der Cloud (Anlagenname, Störungsmeldungen) werden in der Kachel immer als reiner Text angezeigt, nie als HTML.
 - Um zu erkennen, ob die Zugangsdaten geändert wurden, speichert das Modul einen **Prüfwert** (HMAC-SHA-256 mit zufälligem Salt je Instanz). Aus diesem Wert lässt sich das Passwort nicht zurückrechnen.
 
 **Was man wissen sollte:**
@@ -554,6 +586,13 @@ echo 'Schwächster Eingang heute: ' . array_key_first($ertraege) . ' mit ' . res
 - Der **Zugangs-Token** der Cloud wird ebenfalls in Symcon gespeichert. Er ist nur etwa 2 Stunden gültig.
 
 **Empfehlung:** Für das Hoymiles-Konto ein Passwort verwenden, das nirgendwo sonst genutzt wird. Dann bleibt der mögliche Schaden im schlimmsten Fall auf die Ansicht der PV-Anlage begrenzt.
+
+### Geschwindigkeit und Last
+
+- **Eine Verbindung je Abruf:** Alle Anfragen eines Abrufs nutzen dieselbe HTTPS-Verbindung (Keep-Alive). Das spart den Verbindungsaufbau für jede einzelne Anfrage. Antworten werden komprimiert übertragen.
+- **Keine unnötigen Anfragen:** Liefert die Cloud bei der gemeinsamen Tagesverlauf-Anfrage nicht alle Eingänge, fragt das Modul einen Tag lang gleich einzeln – statt bei jedem Abruf erst vergeblich gemeinsam.
+- Nachts reicht **eine Anfrage** je Abruf; Tagesertrag je Eingang und Tagesverlauf werden höchstens alle 15 Minuten neu berechnet; Variablen werden nur bei geänderten Werten geschrieben.
+- Die **Kachel** hält ihre Animationen an, solange sie nicht sichtbar ist (App im Hintergrund), und ein eigenes Bild wird nur einmal verkleinert und dann zwischengespeichert.
 
 ## 18. Fehlerbehebung
 
@@ -668,6 +707,7 @@ Version 1.1 fasst alle Erweiterungen seit 1.0 zusammen. Bestehende Einstellungen
 
 | Version | Build | Änderungen |
 |---------|-------|------------|
+| 1.1 | 23 | Symcon-9.0-Technik: Basisklasse `IPSModuleStrict` (ab Symcon 8.1), Darstellungen statt Variablenprofile (alte `HOYM.*`-Profile werden aufgeräumt), kompatibel mit PHP 8.5; Kachel folgt dem Design der Visualisierung, neues Farbschema „Symcon-Design“, Antippen öffnet Variablen (`openObject`, ab 8.2); Sicherheit: Token-Schwärzung, HTTPS-only, Größenbegrenzung, robuster Tagesverlauf-Decoder, höchstens ein Abruf je 30 s über Kachel/Skript, Wartezeit nach falscher Anmeldung, keine gleichzeitigen Abrufe; Geschwindigkeit: eine Verbindung je Abruf, Komprimierung, überflüssige Sammelanfrage entfällt, Kachel-Animationen pausieren im Hintergrund; Badges und Lizenzangaben im README |
 | 1.1 | 22 | Neuer Haken „Ein Speicher ist angeschlossen“: Eingänge, die nachts Strom liefern, werden automatisch als Speicher erkannt und aus den Warnungen genommen; „Eingang schwächer“ vergleicht nachts nicht mehr |
 | 1.1 | 21 | Version 1.1: Zusammenfassung aller Erweiterungen seit 1.0 (siehe oben) |
 | 1.0 | 20 | Verkleinern sehr großer Bilder prüft vorher den freien Speicher (hebt die PHP-Grenze bei Bedarf kurz an) – kein „Allowed memory size exhausted“ mehr beim Übernehmen; ist es trotzdem zu groß, erscheint die Illustration und ein Hinweis im Meldungsfenster |
@@ -693,8 +733,14 @@ Version 1.1 fasst alle Erweiterungen seit 1.0 zusammen. Bestehende Einstellungen
 
 ## 22. Lizenz und Dank
 
-Dieses Modul steht unter der **MIT-Lizenz** (siehe Datei `LICENSE`).
+Dieses Modul steht unter der **MIT-Lizenz** (siehe Datei `LICENSE`): Jeder darf es nutzen, verändern und weitergeben – auch in eigenen Projekten –, solange der Lizenz- und Copyright-Hinweis erhalten bleibt. Es gibt keine Gewährleistung. Jede Code-Datei trägt dazu einen Kopf mit `SPDX-License-Identifier: MIT` und den Rechteinhabern.
+
+| Teil | Rechteinhaber | Lizenz |
+|------|---------------|--------|
+| Modul, Kachel, Tests | Armin Frohwerk | MIT |
+| Cloud-Client `libs/HoymilesClient.php` (Anmeldung, Endpunkte) | Portierung von Philra94 / Armin Frohwerk | MIT |
+| Hinweise zu Firmware-, Geräte- und Steuerbefehlen (kein übernommener Code) | Eistee82 (ioBroker.hoymiles) | MIT |
 
 Der Teil für die Kommunikation mit der Hoymiles-Cloud ist eine Portierung des Home-Assistant-Projekts [homeassistant-hoymiles-cloud](https://github.com/Philra94/homeassistant-hoymiles-cloud) von Philra94 (ebenfalls MIT-Lizenz). Hinweise zu Firmware-, Geräte- und Steuer-Schnittstellen stammen aus dem ioBroker-Adapter [ioBroker.hoymiles](https://github.com/Eistee82/ioBroker.hoymiles). Vielen Dank für die Vorarbeit beim Entschlüsseln von Anmeldung und Datenformat.
 
-Dieses Modul ist kein offizielles Produkt von Hoymiles und steht in keiner Verbindung zu Hoymiles Power Electronics Inc.
+Dieses Modul ist kein offizielles Produkt von Hoymiles und steht in keiner Verbindung zu Hoymiles Power Electronics Inc. „Hoymiles“ und „S-Miles“ sind Marken ihrer jeweiligen Inhaber und werden hier nur zur Beschreibung verwendet. Das Modul nutzt die nicht offiziell dokumentierte Schnittstelle der S-Miles Cloud; Hoymiles kann sie jederzeit ändern. Die abgerufenen Anlagendaten gehören dir – das Modul gibt sie an niemanden weiter.

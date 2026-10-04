@@ -185,7 +185,11 @@
             "Storage detection is switched off.": "Die Speicher-Erkennung ist ausgeschaltet.",
             "No storage input detected yet. An input that still delivers power at night is treated as storage automatically.": "Noch kein Speicher-Eingang erkannt. Ein Eingang, der nachts Strom liefert, wird automatisch als Speicher behandelt.",
             "Detected as storage (delivered power at night): %s": "Als Speicher erkannt (lieferte nachts Strom): %s",
-            "%s delivers %d W at night – it is treated as a storage input from now on.": "%s liefert nachts %d W – wird ab jetzt als Speicher-Eingang behandelt."
+            "%s delivers %d W at night – it is treated as a storage input from now on.": "%s liefert nachts %d W – wird ab jetzt als Speicher-Eingang behandelt.",
+            "Colours": "Farben",
+            "Solar yellow (classic)": "Sonnengelb (klassisch)",
+            "Symcon design (accent colour of the visualisation)": "Symcon-Design (Akzentfarbe der Visualisierung)",
+            "Text and background always follow the design chosen in the visualisation (light or dark). With \"Symcon design\", power, ring, daily curve and bars also take on its accent colour. Tapping a value in the tile opens the matching variable (from Symcon 8.2).": "Schrift und Hintergrund richten sich immer nach dem in der Visualisierung gewählten Design (hell oder dunkel). Mit „Symcon-Design“ übernehmen auch Leistung, Ring, Tagesverlauf und Balken dessen Akzentfarbe. Antippen eines Werts in der Kachel öffnet die passende Variable (ab Symcon 8.2)."
         }
     }
 }

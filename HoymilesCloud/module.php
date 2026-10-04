@@ -2,13 +2,18 @@
 
 declare(strict_types=1);
 
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Armin Frohwerk
+ */
+
 require_once __DIR__ . '/../libs/HoymilesClient.php';
 
 class HoymilesDeviceException extends HoymilesException
 {
 }
 
-class HoymilesCloud extends IPSModule
+class HoymilesCloud extends IPSModuleStrict
 {
     private const STATUS_OK = 102;
     private const STATUS_INACTIVE = 104;
@@ -31,6 +36,8 @@ class HoymilesCloud extends IPSModule
     private const BACKFILL_TICK_MS = 1500;
     private const COMMAND_POLL_MS = 2000;
     private const COMMAND_MAX_POLLS = 20;
+    private const REFRESH_MIN_GAP = 30;          // Sekunden zwischen zwei Abrufen per Kachel/Skript
+    private const AUTH_BACKOFF_MAX = 21600;      // nach falscher Anmeldung höchstens alle 6 Stunden erneut versuchen
 
     // Steuerbefehle (Codes aus der S-Miles-Weboberfläche): Name => [Aktion, Gerätetyp]
     private const COMMANDS = [
@@ -40,7 +47,7 @@ class HoymilesCloud extends IPSModule
         'dtu_reboot' => [1, 1],   // DTU neu starten
     ];
 
-    public function Create()
+    public function Create(): void
     {
         parent::Create();
 
@@ -85,6 +92,7 @@ class HoymilesCloud extends IPSModule
 
         // Kachel
         $this->RegisterPropertyInteger('TileMaxPower', 0); // 0 = aus dem Wechselrichter-Modell
+        $this->RegisterPropertyString('TileColors', 'solar');            // solar = Sonnengelb | accent = Akzentfarbe des Symcon-Designs
         $this->RegisterPropertyString('TileBackground', 'illustration'); // illustration | picture | image | none
         $this->RegisterPropertyInteger('TileImage', 0);                 // Medienobjekt (Bild)
         $this->RegisterPropertyInteger('TileImageOpacity', 30);          // %
@@ -101,6 +109,7 @@ class HoymilesCloud extends IPSModule
         $this->RegisterAttributeString('Channels', '[]');
         $this->RegisterAttributeInteger('BrightnessRegistered', 0);
         $this->RegisterAttributeInteger('NextUpdate', 0);
+        $this->RegisterAttributeInteger('AuthFailures', 0);
         $this->RegisterAttributeString('StorageDetected', '{}');      // Eingänge, die nachts Strom lieferten: Ident => Zeitpunkt
         $this->RegisterAttributeInteger('EnergyCalcAt', 0);
         $this->RegisterAttributeString('EnergyDate', '');
@@ -120,15 +129,11 @@ class HoymilesCloud extends IPSModule
         $this->RegisterTimer('BackfillTimer', 0, 'HOYM_BackfillStep($_IPS[\'TARGET\']);');
         $this->RegisterTimer('CommandTimer', 0, 'HOYM_CommandStep($_IPS[\'TARGET\']);');
 
-        $this->registerProfiles();
-
         // Eigene Kachel für die Kachel-Visualisierung (HTML-SDK)
-        if (method_exists($this, 'SetVisualizationType')) { // HTML-SDK ab Symcon 7.1
-            $this->SetVisualizationType(1);
-        }
+        $this->SetVisualizationType(1);
     }
 
-    public function ApplyChanges()
+    public function ApplyChanges(): void
     {
         parent::ApplyChanges();
 
@@ -136,31 +141,30 @@ class HoymilesCloud extends IPSModule
         if (IPS_GetKernelRunlevel() !== KR_READY) {
             return;
         }
-        $this->registerProfiles();
-
-        $this->RegisterVariableBoolean('Producing', $this->Translate('Producing'), 'HOYM.Producing', 0);
-        $this->RegisterVariableFloat('Power', $this->Translate('Power'), '~Watt', 1);
-        $this->RegisterVariableFloat('EnergyToday', $this->Translate('Yield today'), '~Electricity', 2);
-        $this->RegisterVariableFloat('EnergyMonth', $this->Translate('Yield month'), '~Electricity', 3);
-        $this->RegisterVariableFloat('EnergyYear', $this->Translate('Yield year'), '~Electricity', 4);
-        $this->RegisterVariableFloat('EnergyTotal', $this->Translate('Yield total'), '~Electricity', 5);
-        $this->RegisterVariableFloat('CO2', $this->Translate('CO₂ saved'), 'HOYM.kg', 6);
-        $this->RegisterVariableInteger('DataTime', $this->Translate('Cloud data time'), '~UnixTimestamp', 7);
-        $this->RegisterVariableInteger('LastUpdate', $this->Translate('Last query'), '~UnixTimestamp', 8);
-        $this->RegisterVariableBoolean('NightActive', $this->Translate('Night mode'), 'HOYM.Night', 9);
-        $this->RegisterVariableBoolean('Alarm', $this->Translate('Fault'), 'HOYM.Fault', 10);
-        $this->RegisterVariableString('AlarmText', $this->Translate('Fault message'), '', 11);
+        // Darstellungen (Symcon 8.0+) statt Variablenprofile; bestehende Variablen werden dabei umgestellt
+        $this->RegisterVariableBoolean('Producing', $this->Translate('Producing'), $this->presentBool('Standby', 'moon', 'Producing', 'sun', 0xF2A900), 0);
+        $this->RegisterVariableFloat('Power', $this->Translate('Power'), $this->presentValue(' W', 0, 'bolt'), 1);
+        $this->RegisterVariableFloat('EnergyToday', $this->Translate('Yield today'), $this->presentValue(' kWh', 2, 'solar-panel'), 2);
+        $this->RegisterVariableFloat('EnergyMonth', $this->Translate('Yield month'), $this->presentValue(' kWh', 1, 'solar-panel'), 3);
+        $this->RegisterVariableFloat('EnergyYear', $this->Translate('Yield year'), $this->presentValue(' kWh', 0, 'solar-panel'), 4);
+        $this->RegisterVariableFloat('EnergyTotal', $this->Translate('Yield total'), $this->presentValue(' kWh', 0, 'solar-panel'), 5);
+        $this->RegisterVariableFloat('CO2', $this->Translate('CO₂ saved'), $this->presentValue(' kg', 1, 'leaf'), 6);
+        $this->RegisterVariableInteger('DataTime', $this->Translate('Cloud data time'), $this->presentDateTime(), 7);
+        $this->RegisterVariableInteger('LastUpdate', $this->Translate('Last query'), $this->presentDateTime(), 8);
+        $this->RegisterVariableBoolean('NightActive', $this->Translate('Night mode'), $this->presentBool('Day', 'sun', 'Night', 'moon'), 9);
+        $this->RegisterVariableBoolean('Alarm', $this->Translate('Fault'), $this->presentBool('none', 'circle-check', 'Fault', 'triangle-exclamation', 0xE53935, 0x2E9E44), 10);
+        $this->RegisterVariableString('AlarmText', $this->Translate('Fault message'), ['PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION, 'ICON' => 'triangle-exclamation', 'MULTILINE' => true], 11);
 
         $savings = $this->ReadPropertyBoolean('Savings');
-        $this->MaintainVariable('SavingsToday', $this->Translate('Savings today'), VARIABLETYPE_FLOAT, 'HOYM.Euro', 12, $savings);
-        $this->MaintainVariable('SavingsMonth', $this->Translate('Savings month'), VARIABLETYPE_FLOAT, 'HOYM.Euro', 13, $savings);
-        $this->MaintainVariable('SavingsYear', $this->Translate('Savings year'), VARIABLETYPE_FLOAT, 'HOYM.Euro', 14, $savings);
-        $this->MaintainVariable('SavingsTotal', $this->Translate('Savings total'), VARIABLETYPE_FLOAT, 'HOYM.Euro', 15, $savings);
+        foreach (['SavingsToday' => ['Savings today', 12], 'SavingsMonth' => ['Savings month', 13], 'SavingsYear' => ['Savings year', 14], 'SavingsTotal' => ['Savings total', 15]] as $ident => [$name, $pos]) {
+            $this->MaintainVariable($ident, $this->Translate($name), VARIABLETYPE_FLOAT, $this->presentValue(' €', 2, 'euro-sign'), $pos, $savings);
+        }
 
-        $this->RegisterVariableString('FirmwareDTU', $this->Translate('Firmware DTU'), '', 16);
-        $this->RegisterVariableString('FirmwareInverter', $this->Translate('Firmware inverter'), '', 17);
-        $this->RegisterVariableBoolean('FirmwareUpdate', $this->Translate('Firmware update'), 'HOYM.Update', 18);
+        $this->RegisterVariableString('FirmwareDTU', $this->Translate('Firmware DTU'), ['PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION, 'ICON' => 'microchip'], 16);
+        $this->RegisterVariableString('FirmwareInverter', $this->Translate('Firmware inverter'), ['PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION, 'ICON' => 'microchip'], 17);
+        $this->RegisterVariableBoolean('FirmwareUpdate', $this->Translate('Firmware update'), $this->presentBool('up to date', 'circle-check', 'update available', 'circle-info', 0x1E88E5), 18);
 
+        $this->removeLegacyProfiles();
         $this->registerBrightnessSensor();
 
         // Zugangsdaten geändert -> Token verwerfen
@@ -192,6 +196,10 @@ class HoymilesCloud extends IPSModule
             $this->SetStatus(self::STATUS_NO_CREDENTIALS);
             return;
         }
+        $this->WriteAttributeInteger('AuthFailures', 0);
+        if ($this->ReadAttributeString('Command') !== '') {
+            $this->SetTimerInterval('CommandTimer', self::COMMAND_POLL_MS); // nach Neustart laufenden Befehl weiter verfolgen
+        }
         // Erster Abruf kurz nach dem Übernehmen, damit das Speichern nicht blockiert
         $this->WriteAttributeInteger('EnergyCalcAt', 0); // Tagesverlauf und Ertrag je Eingang beim ersten Abruf neu berechnen
         $this->SetTimerInterval('UpdateTimer', 2000);
@@ -202,7 +210,7 @@ class HoymilesCloud extends IPSModule
         }
     }
 
-    public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
+    public function MessageSink(int $TimeStamp, int $SenderID, int $Message, array $Data): void
     {
         if ($Message === IPS_KERNELSTARTED) {
             $this->ApplyChanges();
@@ -222,7 +230,7 @@ class HoymilesCloud extends IPSModule
         }
     }
 
-    public function GetConfigurationForm()
+    public function GetConfigurationForm(): string
     {
         $form = json_decode((string) file_get_contents(__DIR__ . '/form.json'), true);
 
@@ -306,6 +314,21 @@ class HoymilesCloud extends IPSModule
             return;
         }
 
+        // Nicht zweimal gleichzeitig abfragen (Timer und Kachel), sonst überschreiben sich Token und Zwischenstände
+        $lock = 'HOYM_Update_' . $this->InstanceID;
+        if (!IPS_SemaphoreEnter($lock, 0)) {
+            $this->SendDebug('Update', 'another query is still running – skipped', 0);
+            return;
+        }
+        try {
+            $this->runUpdate();
+        } finally {
+            IPS_SemaphoreLeave($lock);
+        }
+    }
+
+    private function runUpdate(): void
+    {
         $client = $this->client();
         $fresh = null; // unbekannt, falls der Abruf scheitert
         try {
@@ -329,15 +352,24 @@ class HoymilesCloud extends IPSModule
             $this->saveClientState($client);
             $this->SetValue('LastUpdate', time());
             $this->scheduleNextUpdate($fresh);
+            $this->authBackoff();
             $this->pushTile();
         }
     }
 
     /** Aktionen aus der Kachel (HTML-SDK). */
-    public function RequestAction($Ident, $Value)
+    public function RequestAction(string $Ident, mixed $Value): void
     {
         switch ($Ident) {
             case 'Refresh':
+                // Schutz vor Dauerfeuer aus der Kachel oder Skripten: höchstens alle 30 Sekunden
+                // abfragen, nach falschem Passwort gar nicht (nur „Verbindung testen“ im Formular).
+                $recent = time() - (int) $this->GetValue('LastUpdate') < self::REFRESH_MIN_GAP;
+                if ($recent || $this->GetStatus() === self::STATUS_AUTH_ERROR) {
+                    $this->SendDebug('Tile', $recent ? 'refresh skipped – last query less than 30 s ago' : 'refresh skipped – login failed, check the access data', 0);
+                    $this->pushTile(true);
+                    break;
+                }
                 $this->Update();
                 break;
             case 'Sync': // Kachel wieder sichtbar: aktuellen Stand senden, ohne die Cloud abzufragen
@@ -349,7 +381,7 @@ class HoymilesCloud extends IPSModule
     }
 
     /** Inhalt der Kachel für die Kachel-Visualisierung. */
-    public function GetVisualizationTile()
+    public function GetVisualizationTile(): string
     {
         return file_get_contents(__DIR__ . '/module.html')
             . '<script>handleMessage(' . json_encode(json_encode(['background' => $this->tileBackground()])) . ');'
@@ -369,6 +401,11 @@ class HoymilesCloud extends IPSModule
             }
             $this->WriteAttributeString('Stations', json_encode($names, JSON_FORCE_OBJECT));
             $this->saveClientState($client);
+            if ($this->GetStatus() === self::STATUS_AUTH_ERROR && $this->ReadPropertyBoolean('Active')) {
+                // Anmeldung klappt wieder: Wartezeit nach Fehlversuchen beenden, gleich abfragen
+                $this->WriteAttributeInteger('AuthFailures', 0);
+                $this->SetTimerInterval('UpdateTimer', 2000);
+            }
             $this->ReloadForm();
 
             $text = sprintf($this->Translate('Login OK (variant: %s)'), $client->getAuthMode()) . "\n\n" . $this->Translate('Plants') . ":\n";
@@ -620,6 +657,7 @@ class HoymilesCloud extends IPSModule
                 // Fallback über den Modellnamen, z. B. HMS-1800-4T -> 4
                 $ports = preg_match('/-(\d)T/i', $model, $mm) ? (int) $mm[1] : 1;
             }
+            $ports = max(1, min(8, $ports)); // Hoymiles-Wechselrichter haben höchstens 4 Eingänge – Schutz vor unsinnigen Angaben
             $micros[] = ['id' => $mid, 'sn' => (string) ($m['sn'] ?? $detail['sn'] ?? ''), 'model' => $model, 'ports' => $ports];
         }
         if (!$micros) {
@@ -1619,17 +1657,21 @@ class HoymilesCloud extends IPSModule
         ob_start();
         $alpha ? imagepng($out, null, 9) : imagejpeg($out, null, 82);
         $data = (string) ob_get_clean();
-        imagedestroy($img);
-        imagedestroy($out);
+        unset($img, $out); // imagedestroy() ist seit PHP 8.0 wirkungslos und ab PHP 8.5 veraltet
         if ($data === '' || strlen($data) >= strlen($raw)) {
             return null;
         }
         return ['uri' => 'data:' . ($alpha ? 'image/png' : 'image/jpeg') . ';base64,' . base64_encode($data), 'from' => [$w, $h], 'to' => [$nw, $nh]];
     }
 
-    private function pushTile(): void
+    /** @param bool $ack Antwort auf „Aktualisieren“, obwohl nicht neu abgefragt wurde (Kachel beendet die Drehung) */
+    private function pushTile(bool $ack = false): void
     {
-        $this->UpdateVisualizationValue($this->tileMessage());
+        $message = $this->tileMessage();
+        if ($ack && str_ends_with($message, '}') && $message !== '{}') {
+            $message = substr($message, 0, -1) . ',"ack":true}';
+        }
+        $this->UpdateVisualizationValue($message);
     }
 
     /** Alle Daten der Kachel als JSON (wird beim Öffnen und nach jedem Abruf gesendet). */
@@ -1664,6 +1706,7 @@ class HoymilesCloud extends IPSModule
                 }
             }
             $inputs[] = [
+                'id'      => (int) @$this->GetIDForIdent($c['ident'] . '_Power'),
                 'name'    => $c['name'],
                 'source'  => $source,
                 'power'   => (float) $value($c['ident'] . '_Power'),
@@ -1722,6 +1765,15 @@ class HoymilesCloud extends IPSModule
             'year'         => (float) $value('EnergyYear'),
             'total'        => (float) $value('EnergyTotal'),
             'savingsToday' => $this->ReadPropertyBoolean('Savings') ? (float) $value('SavingsToday') : null,
+            'colors'       => $this->ReadPropertyString('TileColors') === 'accent' ? 'accent' : 'solar',
+            'ids'          => [
+                'power' => (int) @$this->GetIDForIdent('Power'),
+                'today' => (int) @$this->GetIDForIdent('EnergyToday'),
+                'saved' => (int) @$this->GetIDForIdent('SavingsToday'),
+                'month' => (int) @$this->GetIDForIdent('EnergyMonth'),
+                'year'  => (int) @$this->GetIDForIdent('EnergyYear'),
+                'alarm' => (int) @$this->GetIDForIdent('AlarmText'),
+            ],
             'dataTime'     => $dataTs,
             'lastUpdate'   => (int) $value('LastUpdate'),
             'nextUpdate'   => $this->ReadPropertyBoolean('Active') ? $this->ReadAttributeInteger('NextUpdate') : 0,
@@ -1746,7 +1798,7 @@ class HoymilesCloud extends IPSModule
                 'storage'       => $this->Translate('Storage'),
                 'panel'         => $this->Translate('Solar panel'),
             ],
-        ]);
+        ], JSON_PARTIAL_OUTPUT_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE) ?: '{}'; // ein ungültiger Wert darf die Kachel nicht leeren
     }
 
     // ---------------------------------------------------------- Steuerbefehle
@@ -1948,7 +2000,7 @@ class HoymilesCloud extends IPSModule
             'expires' => $this->ReadAttributeInteger('TokenExpires'),
             'mode'    => $this->ReadAttributeString('TokenMode'),
         ];
-        return new HoymilesClient(
+        $client = new HoymilesClient(
             $this->ReadPropertyString('Username'),
             $this->ReadPropertyString('Password'),
             $this->ReadPropertyString('AuthMode'),
@@ -1957,10 +2009,15 @@ class HoymilesCloud extends IPSModule
                 $this->SendDebug($title, $message, 0);
             }
         );
+        $client->setNoCombineUntil((int) $this->GetBuffer('NoCombineUntil'));
+        return $client;
     }
 
     private function saveClientState(HoymilesClient $client): void
     {
+        if ((string) $client->getNoCombineUntil() !== $this->GetBuffer('NoCombineUntil')) {
+            $this->SetBuffer('NoCombineUntil', (string) $client->getNoCombineUntil());
+        }
         $s = $client->getState();
         if ($s['token'] !== $this->ReadAttributeString('Token')) {
             $this->WriteAttributeString('Token', $s['token']);
@@ -2038,6 +2095,27 @@ class HoymilesCloud extends IPSModule
         return json_decode($this->ReadAttributeString('Channels'), true) ?: [];
     }
 
+    /**
+     * Nach einer abgelehnten Anmeldung nicht im normalen Takt weiter probieren – das kann das
+     * Konto sperren. Wartezeit verdoppelt sich: 15 Minuten, 30, 60 … bis höchstens 6 Stunden.
+     * „Übernehmen“ oder „Verbindung testen“ starten sofort einen neuen Versuch.
+     */
+    private function authBackoff(): void
+    {
+        if ($this->GetStatus() !== self::STATUS_AUTH_ERROR) {
+            if ($this->ReadAttributeInteger('AuthFailures') !== 0) {
+                $this->WriteAttributeInteger('AuthFailures', 0);
+            }
+            return;
+        }
+        $failures = $this->ReadAttributeInteger('AuthFailures') + 1;
+        $this->WriteAttributeInteger('AuthFailures', $failures);
+        $wait = (int) min(self::AUTH_BACKOFF_MAX, 900 * 2 ** min(10, $failures - 1));
+        $this->SetTimerInterval('UpdateTimer', $wait * 1000);
+        $this->WriteAttributeInteger('NextUpdate', time() + $wait);
+        $this->SendDebug('Timer', sprintf('login failed %d time(s) – next attempt in %d minutes', $failures, $wait / 60), 0);
+    }
+
     private function fail(int $status, Throwable $e): void
     {
         $this->SendDebug('Error', $e->getMessage(), 0);
@@ -2052,10 +2130,10 @@ class HoymilesCloud extends IPSModule
         $wanted = [];
         foreach ($channels as $k => $c) {
             $pos = 30 + $k * 4;
-            $this->RegisterVariableFloat($c['ident'] . '_Power', sprintf($this->Translate('%s power'), $c['name']), '~Watt', $pos);
-            $this->RegisterVariableFloat($c['ident'] . '_Voltage', sprintf($this->Translate('%s voltage'), $c['name']), 'HOYM.Voltage', $pos + 1);
-            $this->RegisterVariableFloat($c['ident'] . '_Current', sprintf($this->Translate('%s current'), $c['name']), 'HOYM.Current', $pos + 2);
-            $this->RegisterVariableFloat($c['ident'] . '_Energy', sprintf($this->Translate('%s yield today'), $c['name']), '~Electricity', $pos + 3);
+            $this->RegisterVariableFloat($c['ident'] . '_Power', sprintf($this->Translate('%s power'), $c['name']), $this->presentValue(' W', 1, 'bolt'), $pos);
+            $this->RegisterVariableFloat($c['ident'] . '_Voltage', sprintf($this->Translate('%s voltage'), $c['name']), $this->presentValue(' V', 1, 'plug'), $pos + 1);
+            $this->RegisterVariableFloat($c['ident'] . '_Current', sprintf($this->Translate('%s current'), $c['name']), $this->presentValue(' A', 2, 'wave-square'), $pos + 2);
+            $this->RegisterVariableFloat($c['ident'] . '_Energy', sprintf($this->Translate('%s yield today'), $c['name']), $this->presentValue(' kWh', 2, 'solar-panel'), $pos + 3);
             array_push($wanted, $c['ident'] . '_Power', $c['ident'] . '_Voltage', $c['ident'] . '_Current', $c['ident'] . '_Energy');
         }
         foreach (IPS_GetChildrenIDs($this->InstanceID) as $child) {
@@ -2132,38 +2210,64 @@ class HoymilesCloud extends IPSModule
     }
 
     /** Wird nur von den SymconStubs (automatisierte Tests) für Timer benötigt. */
-    protected function getTime()
+    protected function getTime(): int
     {
         return time();
     }
 
-    private function registerProfiles(): void
+    // ------------------------------------------------------- Darstellungen
+
+    /** Wertanzeige für Zahlen: Einheit, Nachkommastellen, Icon (Font-Awesome-Name). */
+    private function presentValue(string $suffix, int $digits, string $icon): array
     {
-        $this->registerFloatProfile('HOYM.Voltage', ' V', 1);
-        $this->registerFloatProfile('HOYM.Current', ' A', 2);
-        $this->registerFloatProfile('HOYM.kg', ' kg', 1);
-        $this->registerFloatProfile('HOYM.Euro', ' €', 2);
-        $this->registerBoolProfile('HOYM.Producing', $this->Translate('Standby'), $this->Translate('Producing'), 'Moon', 'Sun');
-        $this->registerBoolProfile('HOYM.Night', $this->Translate('Day'), $this->Translate('Night'), 'Sun', 'Moon');
-        $this->registerBoolProfile('HOYM.Update', $this->Translate('up to date'), $this->Translate('update available'), 'Ok', 'Information');
-        $this->registerBoolProfile('HOYM.Fault', $this->Translate('none'), $this->Translate('Fault'), 'Ok', 'Warning', 0x00A000, 0xFF0000);
+        return ['PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION, 'SUFFIX' => $suffix, 'DIGITS' => $digits, 'ICON' => $icon];
     }
 
-    private function registerBoolProfile(string $name, string $off, string $on, string $iconOff, string $iconOn, int $colorOff = -1, int $colorOn = -1): void
+    /** Wertanzeige für Ja/Nein mit Text, Icon und optional Farbe je Zustand. */
+    private function presentBool(string $off, string $iconOff, string $on, string $iconOn, int $colorOn = -1, int $colorOff = -1): array
     {
-        if (!IPS_VariableProfileExists($name)) {
-            IPS_CreateVariableProfile($name, VARIABLETYPE_BOOLEAN);
-        }
-        IPS_SetVariableProfileAssociation($name, 0, $off, $iconOff, $colorOff);
-        IPS_SetVariableProfileAssociation($name, 1, $on, $iconOn, $colorOn);
+        $option = function (bool $value, string $caption, string $icon, int $color): array {
+            $o = ['Value' => $value, 'Caption' => $this->Translate($caption), 'IconActive' => true, 'IconValue' => $icon];
+            if ($color >= 0) {
+                $o['ColorActive'] = true;
+                $o['ColorValue'] = $color;
+            }
+            return $o;
+        };
+        return [
+            'PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION,
+            'OPTIONS'      => json_encode([$option(false, $off, $iconOff, $colorOff), $option(true, $on, $iconOn, $colorOn)]),
+        ];
     }
 
-    private function registerFloatProfile(string $name, string $suffix, int $digits): void
+    private function presentDateTime(): array
     {
-        if (!IPS_VariableProfileExists($name)) {
-            IPS_CreateVariableProfile($name, VARIABLETYPE_FLOAT);
+        return ['PRESENTATION' => VARIABLE_PRESENTATION_DATE_TIME, 'DATE' => 1, 'MONTH_TEXT' => false, 'DAY_OF_THE_WEEK' => false, 'TIME' => 2];
+    }
+
+    /**
+     * Die früheren Variablenprofile HOYM.* löschen, sobald keine Variable sie mehr nutzt
+     * (nach der Umstellung auf Darstellungen). Ein Profil, das noch irgendwo verwendet wird –
+     * z. B. von Hand einer anderen Variable zugewiesen –, bleibt erhalten.
+     */
+    private function removeLegacyProfiles(): void
+    {
+        $legacy = ['HOYM.Voltage', 'HOYM.Current', 'HOYM.kg', 'HOYM.Euro', 'HOYM.Producing', 'HOYM.Night', 'HOYM.Update', 'HOYM.Fault'];
+        $existing = array_values(array_filter($legacy, 'IPS_VariableProfileExists'));
+        if (!$existing) {
+            return;
         }
-        IPS_SetVariableProfileText($name, '', $suffix);
-        IPS_SetVariableProfileDigits($name, $digits);
+        $used = [];
+        foreach (IPS_GetVariableList() as $vid) {
+            $v = IPS_GetVariable($vid);
+            $used[(string) ($v['VariableProfile'] ?? '')] = true;
+            $used[(string) ($v['VariableCustomProfile'] ?? '')] = true;
+        }
+        foreach ($existing as $name) {
+            if (!isset($used[$name])) {
+                IPS_DeleteVariableProfile($name);
+                $this->SendDebug('Presentation', "legacy profile $name removed", 0);
+            }
+        }
     }
 }

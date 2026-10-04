@@ -1,13 +1,17 @@
 <style>
     /*
      * Kachel „Hoymiles Cloud“ für die Kachel-Visualisierung von IP-Symcon.
-     * Schrift und Textfarbe kommen von der Visualisierung (hell/dunkel) – alle
-     * Neben- und Linienfarben werden daraus abgeleitet (currentColor), damit die
-     * Kachel in beiden Darstellungen passt.
+     * SPDX-License-Identifier: MIT · Copyright (c) 2026 Armin Frohwerk
+     *
+     * Kachelschema: Schrift- und Akzentfarbe kommen aus dem gewählten Design der
+     * Visualisierung (CSS-Variablen --content-color und --accent-color, Hintergrund
+     * --card-color). Alle Neben- und Linienfarben werden daraus abgeleitet
+     * (currentColor), damit die Kachel in hellen und dunklen Designs passt.
      */
-    :root {
+    #hm {
+        color: var(--content-color, inherit);
         --solar: #f2a900;
-        --solar-soft: color-mix(in srgb, #f2a900 22%, transparent);
+        --solar-soft: color-mix(in srgb, var(--solar) 22%, transparent);
         --storage: #3987e5;
         --good: #0ca30c;
         --critical: #d03b3b;
@@ -16,6 +20,12 @@
         --track: color-mix(in srgb, currentColor 12%, transparent);
         --line: color-mix(in srgb, currentColor 14%, transparent);
     }
+    /* Farbschema „Symcon-Design“: Leistung, Ring, Kurve und Balken in der Akzentfarbe des Designs */
+    #hm[data-colors="accent"] { --solar: var(--accent-color, #f2a900); }
+    .link { cursor: pointer; }
+    .link:hover { text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
+    .in.link:hover { text-decoration: none; }
+    .in.link:hover .n { color: currentColor; }
     html, body { height: 100%; }
     body {
         margin: 0;
@@ -81,6 +91,8 @@
     @keyframes hmShine { 0%, 55% { opacity: 0; transform: translateX(0); } 60% { opacity: 1; } 95% { opacity: 1; } 100% { opacity: 0; transform: translateX(150px); } }
     @keyframes hmFlow { to { stroke-dashoffset: -16; } }
     @media (prefers-reduced-motion: reduce) { #bgArt * { animation: none !important; } }
+    /* Kachel nicht sichtbar (App im Hintergrund, anderer Tab): Animationen anhalten, spart Akku und Rechenzeit */
+    #hm.paused, #hm.paused * { animation-play-state: paused !important; }
     @media (max-width: 420px), (max-height: 210px) { #bgArt, #bgPic { display: none; } }
     @media (max-height: 400px) { #bgArt { height: 100px; top: calc(var(--top-safe, 48px) + 34px); } #bgPic { height: 108px; } }
 
@@ -166,7 +178,8 @@
     .in .n svg { width: 12px; height: 12px; color: var(--storage); flex: none; }
     .bar { height: 8px; border-radius: 4px; background: var(--track); overflow: hidden; }
     .bar i { display: block; height: 100%; border-radius: 4px; background: var(--solar); width: 0; transition: width 1.2s ease; }
-    .in.storage .bar i { background: var(--storage); }
+    /* Speicher-Eingänge schraffiert – bleiben auch erkennbar, wenn die Akzentfarbe ebenfalls blau ist */
+    .in.storage .bar i { background: repeating-linear-gradient(135deg, var(--storage) 0 6px, color-mix(in srgb, var(--storage) 55%, transparent) 6px 10px); }
     .in.weak .n { color: var(--critical); }
     .in .w { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .in .w b { font-weight: 600; }
@@ -375,6 +388,16 @@
         return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
     }
 
+    // Antippen öffnet die zugehörige Variable (openObject, ab Symcon 8.2). In älteren
+    // Versionen gibt es die Funktion nicht – dann bleibt alles wie bisher.
+    function hmLink(el, id) {
+        const node = typeof el === 'string' ? document.getElementById(el) : el;
+        if (!node) { return; }
+        const ok = !!id && typeof openObject === 'function';
+        node.classList.toggle('link', ok);
+        node.onclick = ok ? (ev) => { ev.stopPropagation(); openObject(id); } : null;
+    }
+
     let hmRefreshAt = 0;
     function hmRefresh() {
         hmRefreshAt = Date.now() / 1000;
@@ -403,8 +426,10 @@
         }
         hmState = s;
         document.getElementById('hm').dataset.status = s.status;
+        document.getElementById('hm').dataset.colors = s.colors || 'solar';
+        const ids = s.ids || {};
         const L = s.labels;
-        if (!s.lastUpdate || s.lastUpdate >= hmRefreshAt - 2) {
+        if (s.ack || !s.lastUpdate || s.lastUpdate >= hmRefreshAt - 2) {
             document.getElementById('refresh').classList.remove('spin'); // nicht bei einer reinen Synchronisation
         }
         document.getElementById('refresh').title = L.refresh;
@@ -425,6 +450,7 @@
         // Störung
         hmShow('alarm', !!s.alarm);
         hmSet('alarmText', s.alarm || '');
+        hmLink('alarm', ids.alarm);
         if (!ready) { return; }
 
         // Kopfzahl und Ring (Anteil an der Nennleistung)
@@ -437,6 +463,9 @@
         hmSet('power', hmNum(s.power, 0));
         hmSet('of', s.pmax > 0 ? L.ofRated.replace('%s', hmNum(share * 100, 0)).replace('%p', hmNum(s.pmax, 0)) : '');
         hmSet('today', hmKWh(s.today));
+        hmLink(document.querySelector('.figures .power'), ids.power);
+        hmLink(document.querySelector('.kpi:not(.saved)'), ids.today);
+        hmLink('savedBox', ids.saved);
         hmSet('todayL', L.today);
         hmShow('savedBox', s.savingsToday !== null);
         if (s.savingsToday !== null) {
@@ -466,6 +495,7 @@
             val.querySelector('small').textContent = hmKWh(inp.energy);
             row.title = inp.name + ': ' + hmNum(inp.power, 0) + ' W · ' + hmNum(inp.voltage, 1) + ' V · ' + hmNum(inp.current, 2) + ' A';
             row.append(name, bar, val);
+            hmLink(row, inp.id);
             box.append(row);
             requestAnimationFrame(() => {
                 fill.style.width = (inp.max > 0 ? Math.min(100, inp.power / inp.max * 100) : 0).toFixed(1) + '%';
@@ -477,6 +507,8 @@
         document.getElementById('fMonth').append(L.month + ' ', Object.assign(document.createElement('b'), { textContent: hmKWh(s.month) }));
         document.getElementById('fYear').innerHTML = '';
         document.getElementById('fYear').append(L.year + ' ', Object.assign(document.createElement('b'), { textContent: hmKWh(s.year) }));
+        hmLink('fMonth', ids.month);
+        hmLink('fYear', ids.year);
         hmFooterTime();
 
         hmDrawCurve();
@@ -577,7 +609,10 @@
             }
         } catch (e) { /* ältere Visualisierung */ }
     }
-    document.addEventListener('visibilitychange', hmSync);
+    document.addEventListener('visibilitychange', () => {
+        document.getElementById('hm').classList.toggle('paused', document.visibilityState === 'hidden');
+        hmSync();
+    });
     window.addEventListener('focus', hmSync);
     window.addEventListener('pageshow', hmSync);
     setTimeout(hmSync, 500);

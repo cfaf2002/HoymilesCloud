@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Armin Frohwerk
+ */
+
 include_once __DIR__ . '/bootstrap.php';
 
 class HoymilesCloudTest extends TestCaseSymconValidation
@@ -86,6 +91,9 @@ class HoymilesCloudTest extends TestCaseSymconValidation
         HOYM_Update($id);
         $this->assertSame(5, $this->countRequests('module/data/count_by_day'), 'combined + one per input');
         $this->assertEqualsWithDelta(104.0, $this->v($id, 'PV4_Power'), 0.01);
+        @unlink(HOYMILES_FAKE_STATE . '/requests.log');
+        HOYM_Update($id);
+        $this->assertSame(3, $this->countRequests('module/data/count_by_day'), 'only the inputs without current value, no combined request for a day');
     }
 
     public function testNightModeViaDataTime(): void
@@ -369,14 +377,20 @@ class HoymilesCloudTest extends TestCaseSymconValidation
         $this->assertSame('panel', $rows[0]['Source']);
     }
 
-    public function testFaultVariableShowsNoneOrFault(): void
+    public function testVariablesUsePresentations(): void
     {
+        IPS_CreateVariableProfile('HOYM.Euro', VARIABLETYPE_FLOAT); // Überbleibsel aus Version 1.1
         $id = $this->instance();
-        $alarm = IPS_GetObjectIDByIdent('Alarm', $id);
-        $this->assertSame('HOYM.Fault', IPS_GetVariable($alarm)['VariableProfile']);
-        IPS\VariableManager::setVariableProfile($alarm, '~Alert'); // Stand von Build 4
-        IPS_ApplyChanges($id);
-        $this->assertSame('HOYM.Fault', IPS_GetVariable($alarm)['VariableProfile'], 'updated from ~Alert on update');
+        $alarm = IPS_GetVariable(IPS_GetObjectIDByIdent('Alarm', $id))['VariablePresentation'];
+        $this->assertSame(VARIABLE_PRESENTATION_VALUE_PRESENTATION, $alarm['PRESENTATION']);
+        $options = json_decode($alarm['OPTIONS'], true);
+        $this->assertSame(['none', 'Fault'], array_column($options, 'Caption'), 'fault shows "none" / "fault", not OK/Alarm');
+        $this->assertSame(0xE53935, $options[1]['ColorValue']);
+        $power = IPS_GetVariable(IPS_GetObjectIDByIdent('Power', $id))['VariablePresentation'];
+        $this->assertSame(' W', $power['SUFFIX']);
+        $time = IPS_GetVariable(IPS_GetObjectIDByIdent('LastUpdate', $id))['VariablePresentation'];
+        $this->assertSame(VARIABLE_PRESENTATION_DATE_TIME, $time['PRESENTATION']);
+        $this->assertFalse(IPS_VariableProfileExists('HOYM.Euro'), 'unused legacy profile removed');
     }
 
     public function testRestartInverter(): void
@@ -478,6 +492,12 @@ class HoymilesCloudTest extends TestCaseSymconValidation
         $this->assertEqualsWithDelta(450.0, $tile['inputs'][0]['max'], 0.01, '1800 W / 4 inputs');
         $this->assertGreaterThan(0, count($tile['curve']), 'daily curve for the tile');
         $this->assertStringContainsString('function handleMessage', IPS\InstanceManager::getInstanceInterface($id)->GetVisualizationTile());
+        $this->assertSame(IPS_GetObjectIDByIdent('Power', $id), $tile['ids']['power'], 'tap on the power opens the variable');
+        $this->assertSame(IPS_GetObjectIDByIdent('PV1_Power', $id), $tile['inputs'][0]['id']);
+        $this->assertSame('solar', $tile['colors']);
+        IPS_SetProperty($id, 'TileColors', 'accent');
+        IPS_ApplyChanges($id);
+        $this->assertSame('accent', $this->tileData($id)['colors'], 'Symcon design colours');
     }
 
     public function testTileShowsFault(): void
@@ -497,6 +517,36 @@ class HoymilesCloudTest extends TestCaseSymconValidation
         $id = $this->instance();
         IPS\InstanceManager::getInstanceInterface($id)->RequestAction('Refresh', true);
         $this->assertGreaterThan(0, $this->countRequests('count_station_real_data'));
+        @unlink(HOYMILES_FAKE_STATE . '/requests.log');
+        IPS\InstanceManager::getInstanceInterface($id)->RequestAction('Refresh', true);
+        $this->assertSame(0, $this->countRequests('count_station_real_data'), 'at most one query per 30 s from the tile');
+    }
+
+    public function testBackoffAfterFailedLogin(): void
+    {
+        $id = $this->instance(['Password' => 'falsch!', 'UpdateInterval' => 5]);
+        HOYM_Update($id);
+        $this->assertSame(201, IPS_GetInstance($id)['InstanceStatus']);
+        $this->assertSame(15, $this->timerMinutes($id), 'first retry after 15 minutes');
+        HOYM_Update($id);
+        $this->assertSame(30, $this->timerMinutes($id), 'then 30 minutes');
+    }
+
+    public function testProtobufRejectsNegativeLength(): void
+    {
+        $error = null;
+        try {
+            HoymilesClient::decodeLineChart(hex2bin('0af5ffffffffffffffff01'));
+        } catch (HoymilesException $e) {
+            $error = $e;
+        }
+        $this->assertTrue($error instanceof HoymilesException, 'broken data is rejected instead of looping forever');
+    }
+
+    public function testRedactsTokens(): void
+    {
+        $this->assertSame('{"token":"***","x":1}', HoymilesClient::redact('{"token":"abc.def","x":1}'));
+        $this->assertSame('{"data":{"token":"***"', HoymilesClient::redact('{"data":{"token":"abc.de'));
     }
 
     public function testTileSyncDoesNotQueryCloud(): void
@@ -680,7 +730,6 @@ class HoymilesCloudTest extends TestCaseSymconValidation
     {
         $module = IPS\InstanceManager::getInstanceInterface($id);
         $method = new ReflectionMethod($module, 'brightnessThreshold');
-        $method->setAccessible(true);
         return $method->invoke($module);
     }
 
@@ -737,7 +786,6 @@ class HoymilesCloudTest extends TestCaseSymconValidation
     {
         $module = IPS\InstanceManager::getInstanceInterface($id);
         $method = new ReflectionMethod($module, 'GetTimerInterval');
-        $method->setAccessible(true);
         return intdiv($method->invoke($module, 'UpdateTimer') + 1000, 60000);
     }
 
@@ -745,7 +793,6 @@ class HoymilesCloudTest extends TestCaseSymconValidation
     {
         $module = IPS\InstanceManager::getInstanceInterface($id);
         $method = new ReflectionMethod($module, 'ReadAttributeString');
-        $method->setAccessible(true);
         return $method->invoke($module, $name);
     }
 }

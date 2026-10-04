@@ -3,6 +3,10 @@
 declare(strict_types=1);
 
 /*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2025 Philra94 (homeassistant-hoymiles-cloud, Vorlage für den Cloud-Client)
+ * Copyright (c) 2026 Armin Frohwerk
+ *
  * Hoymiles S-Miles Cloud Client (ohne Symcon-Abhängigkeiten)
  *
  * Portierung des API-Teils von github.com/Philra94/homeassistant-hoymiles-cloud
@@ -32,10 +36,14 @@ class HoymilesClient
         'home_v3'      => ['home', self::BASE_EU, 'sma/ad', '2.10.0'],
     ];
 
-    private const TOKEN_LIFETIME = 6900; // Token gilt laut Cloud ca. 7200 s
+    private const TOKEN_LIFETIME = 6900;
+    private const MAX_RESPONSE = 8 * 1024 * 1024; // Token gilt laut Cloud ca. 7200 s
 
     /** Nur für automatisierte Tests: ersetzt https://…hoymiles.com durch einen lokalen Testserver. */
     public static $baseUrlOverride = null;
+
+    /** Eine Verbindung für alle Anfragen eines Abrufs: spart den TLS-Aufbau je Anfrage (Keep-Alive). */
+    private $curl = null;
 
     private $user;
     private $password;
@@ -63,6 +71,19 @@ class HoymilesClient
         if ($this->state['expires'] < time()) {
             $this->state['token'] = '';
         }
+    }
+
+    /** Bis wann die gemeinsame Tagesverlauf-Anfrage für mehrere Eingänge übersprungen wird (Unix-Zeit). */
+    private $noCombineUntil = 0;
+
+    public function setNoCombineUntil(int $until): void
+    {
+        $this->noCombineUntil = $until;
+    }
+
+    public function getNoCombineUntil(): int
+    {
+        return $this->noCombineUntil;
     }
 
     /** Aktueller Token-Zustand zum Speichern (z. B. in Attributen). */
@@ -360,7 +381,9 @@ class HoymilesClient
             return self::decodeLineChart($raw);
         };
 
-        if (count($ports) > 1) {
+        // Liefert die Cloud bei einer gemeinsamen Anfrage nicht alle Eingänge, wird sie einen Tag lang
+        // gar nicht erst versucht – spart bei jedem Abruf eine überflüssige Anfrage.
+        if (count($ports) > 1 && time() >= $this->noCombineUntil) {
             $chart = $request($ports);
             $byPort = [];
             foreach ($chart['series'] as $series) {
@@ -382,7 +405,8 @@ class HoymilesClient
                 }
                 return $result;
             }
-            $this->log('Tagesverlauf', 'gemeinsame Anfrage unvollständig – frage Eingänge einzeln ab');
+            $this->noCombineUntil = time() + 86400;
+            $this->log('Tagesverlauf', 'gemeinsame Anfrage unvollständig – frage Eingänge einzeln ab (für 24 Stunden)');
         }
 
         $result = [];
@@ -443,10 +467,16 @@ class HoymilesClient
         $chart = ['x_axis' => [], 'series' => []];
         $pos = 0;
         $len = strlen($raw);
+        if ($len > 2 * 1024 * 1024) {
+            throw new HoymilesException('Tagesverlauf: Antwort zu groß (' . $len . ' Byte)');
+        }
         while ($pos < $len) {
             [$field, $value] = self::pbField($raw, $pos);
+            if (count($chart['x_axis']) > 2000 || count($chart['series']) > 64) {
+                throw new HoymilesException('Tagesverlauf: unplausibel viele Einträge');
+            }
             if ($field === 1) {
-                $chart['x_axis'][] = $value;
+                $chart['x_axis'][] = (string) $value;
             } elseif ($field === 2) {
                 $series = ['type' => '', 'data' => [], 'port' => null];
                 $p = 0;
@@ -456,7 +486,10 @@ class HoymilesClient
                     if ($f === 1) {
                         $series['type'] = $v;
                     } elseif ($f === 2) {
-                        $series['data'] = strlen($v) >= 4 ? array_values(unpack('g*', $v)) : [];
+                        // NaN/Unendlich aus der Cloud nicht weiterreichen (bricht sonst json_encode der Kachel)
+                        $series['data'] = strlen($v) >= 4 ? array_map(static function ($x) {
+                            return is_finite((float) $x) ? (float) $x : NAN;
+                        }, array_slice(array_values(unpack('g*', $v)), 0, 2000)) : [];
                     } elseif ($f === 4) {
                         $series['port'] = $v;
                     }
@@ -486,7 +519,11 @@ class HoymilesClient
                 $slotTs = mktime(intdiv($minute, 60), $minute % 60, 0);
                 $fresh = $slotTs > time() || (time() - $slotTs) <= $maxAgeMinutes * 60;
             }
-            $out[$type] = $fresh ? round((float) end($s['data']), $digits[$type]) : 0.0;
+            $last = (float) end($s['data']);
+            if (!is_finite($last)) {
+                continue; // ungültiger Wert: wie „kein aktueller Wert“
+            }
+            $out[$type] = $fresh ? round($last, $digits[$type]) : 0.0;
             if ($type === 'MODULE_POWER') {
                 $out['fresh'] = $fresh;
             }
@@ -699,18 +736,24 @@ class HoymilesClient
             case 0:
                 return [$field, self::pbVarint($buf, $pos)];
             case 1:
+                if ($pos + 8 > strlen($buf)) {
+                    throw new HoymilesException('Protobuf: Feld abgeschnitten');
+                }
                 $v = substr($buf, $pos, 8);
                 $pos += 8;
                 return [$field, $v];
             case 2:
                 $l = self::pbVarint($buf, $pos);
-                if ($pos + $l > strlen($buf)) {
+                if ($l < 0 || $l > strlen($buf) - $pos) {
                     throw new HoymilesException('Protobuf: Feld abgeschnitten');
                 }
                 $v = substr($buf, $pos, $l);
                 $pos += $l;
                 return [$field, $v];
             case 5:
+                if ($pos + 4 > strlen($buf)) {
+                    throw new HoymilesException('Protobuf: Feld abgeschnitten');
+                }
                 $v = substr($buf, $pos, 4);
                 $pos += 4;
                 return [$field, $v];
@@ -735,7 +778,9 @@ class HoymilesClient
         $body = $this->http($url, $payload, $headers, $http);
         $json = json_decode($body, true);
         if (!is_array($json)) {
-            throw new HoymilesException("Ungültige Antwort (HTTP $http): " . substr($body, 0, 200));
+            // Bei der Anmeldung nie Teile der Antwort weitergeben (könnten ein Token enthalten)
+            $excerpt = strpos($url, '/auth/') !== false ? '[' . strlen($body) . ' Byte]' : self::redact(substr($body, 0, 200));
+            throw new HoymilesException("Ungültige Antwort (HTTP $http): " . $excerpt);
         }
         return $json;
     }
@@ -749,30 +794,55 @@ class HoymilesClient
         $isAuth = strpos($url, '/auth/') !== false;
         $this->log('Request', "POST $url " . ($isAuth ? '[Login-Daten ausgeblendet]' : $json));
 
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
+        if ($this->curl === null) {
+            $this->curl = curl_init();
+        }
+        $ch = $this->curl;
+        $options = [
+            CURLOPT_URL            => $url,
             CURLOPT_POST           => true,
             CURLOPT_POSTFIELDS     => $json,
             CURLOPT_HTTPHEADER     => $headers,
-            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_RETURNTRANSFER => false,
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT        => 25,
             CURLOPT_FOLLOWLOCATION => false,
-        ]);
-        $body = curl_exec($ch);
+            CURLOPT_ENCODING       => '',   // gzip/deflate annehmen: weniger Daten
+            CURLOPT_SSL_VERIFYPEER => true, // Zertifikat der Cloud immer prüfen
+            CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_MAXFILESIZE    => self::MAX_RESPONSE,
+            // Antwort selbst einsammeln und nach dem Entpacken begrenzen (Schutz vor riesigen Antworten)
+            CURLOPT_WRITEFUNCTION  => static function ($handle, string $chunk) use (&$received): int {
+                if (strlen($received) + strlen($chunk) > self::MAX_RESPONSE) {
+                    return 0; // bricht die Übertragung ab
+                }
+                $received .= $chunk;
+                return strlen($chunk);
+            },
+        ];
+        if (self::$baseUrlOverride === null) {
+            // nur HTTPS – auch keine Umleitung auf unverschlüsselte Verbindungen
+            $options[CURLOPT_PROTOCOLS] = CURLPROTO_HTTPS;
+        }
+        $received = '';
+        curl_setopt_array($ch, $options);
+        $body = curl_exec($ch) === false ? false : $received;
         $http = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         $err = curl_error($ch);
-        curl_close($ch);
         if ($body === false) {
             throw new HoymilesException("Verbindungsfehler: $err");
         }
         $body = (string) $body;
-        $shown = ($body !== '' && $body[0] !== '{') ? '[binär, ' . strlen($body) . ' Byte]' : substr($body, 0, 2000);
-        if ($isAuth) {
-            $shown = preg_replace('/"token"\s*:\s*"[^"]+"/', '"token":"***"', $shown);
-        }
+        // erst schwärzen, dann kürzen – sonst bliebe ein abgeschnittenes Token sichtbar
+        $shown = ($body !== '' && $body[0] !== '{') ? '[binär, ' . strlen($body) . ' Byte]' : substr(self::redact($body), 0, 2000);
         $this->log('Response', "HTTP $http $shown");
         return $body;
+    }
+
+    /** Token und ähnliche Geheimnisse in Texten für Debug-Ausgaben und Fehlermeldungen schwärzen. */
+    public static function redact(string $text): string
+    {
+        return (string) preg_replace('/"(token|access_token|refresh_token|password|pwd|ch)"\s*:\s*"[^"]*"?/i', '"$1":"***"', $text);
     }
 
     private function log(string $title, string $message): void

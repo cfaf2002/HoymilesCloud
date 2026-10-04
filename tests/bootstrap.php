@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+/*
+ * SPDX-License-Identifier: MIT
+ * Copyright (c) 2026 Armin Frohwerk
+ */
+
 // SymconStubs: im CI unter tests/stubs geklont, lokal per Umgebungsvariable SYMCON_STUBS
 $stubs = getenv('SYMCON_STUBS') ?: __DIR__ . '/stubs';
 define('SYMCON_STUBS_DIR', $stubs);

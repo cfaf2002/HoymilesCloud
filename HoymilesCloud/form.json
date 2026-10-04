@@ -309,6 +309,25 @@
             "items": [
                 {
                     "type": "Select",
+                    "name": "TileColors",
+                    "caption": "Colours",
+                    "options": [
+                        {
+                            "caption": "Solar yellow (classic)",
+                            "value": "solar"
+                        },
+                        {
+                            "caption": "Symcon design (accent colour of the visualisation)",
+                            "value": "accent"
+                        }
+                    ]
+                },
+                {
+                    "type": "Label",
+                    "caption": "Text and background always follow the design chosen in the visualisation (light or dark). With \"Symcon design\", power, ring, daily curve and bars also take on its accent colour. Tapping a value in the tile opens the matching variable (from Symcon 8.2)."
+                },
+                {
+                    "type": "Select",
                     "name": "TileBackground",
                     "caption": "Background",
                     "options": [
