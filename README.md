@@ -1,6 +1,6 @@
 # Hoymiles Cloud für IP-Symcon
 
-[![Version](https://img.shields.io/badge/Version-1.1%20%C2%B7%20Build%2023-2ea44f)](library.json)
+[![Version](https://img.shields.io/badge/Version-1.1%20%C2%B7%20Build%2024-2ea44f)](library.json)
 [![IP-Symcon](https://img.shields.io/badge/IP--Symcon-ab%208.1-1f6feb)](https://www.symcon.de)
 [![Symcon 9.0](https://img.shields.io/badge/optimiert%20f%C3%BCr-Symcon%209.0-0aa5a5)](https://www.symcon.de/de/service/dokumentation/installation/migrationen/v81-v90-q1-2026/)
 [![Kachel](https://img.shields.io/badge/Kachel--Visualisierung-HTML--SDK-f2a900)](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/html-sdk/)
@@ -707,6 +707,7 @@ Version 1.1 fasst alle Erweiterungen seit 1.0 zusammen. Bestehende Einstellungen
 
 | Version | Build | Änderungen |
 |---------|-------|------------|
+| 1.1 | 24 | „Produziert“, „Nachtmodus“ und „Firmware-Update“ zeigten in der Symcon-App „Invalid Configuration“: jede Option der Darstellung hat jetzt immer eine Farbe; Störungsmeldung als einfache Textzeile |
 | 1.1 | 23 | Symcon-9.0-Technik: Basisklasse `IPSModuleStrict` (ab Symcon 8.1), Darstellungen statt Variablenprofile (alte `HOYM.*`-Profile werden aufgeräumt), kompatibel mit PHP 8.5; Kachel folgt dem Design der Visualisierung, neues Farbschema „Symcon-Design“, Antippen öffnet Variablen (`openObject`, ab 8.2); Sicherheit: Token-Schwärzung, HTTPS-only, Größenbegrenzung, robuster Tagesverlauf-Decoder, höchstens ein Abruf je 30 s über Kachel/Skript, Wartezeit nach falscher Anmeldung, keine gleichzeitigen Abrufe; Geschwindigkeit: eine Verbindung je Abruf, Komprimierung, überflüssige Sammelanfrage entfällt, Kachel-Animationen pausieren im Hintergrund; Badges und Lizenzangaben im README |
 | 1.1 | 22 | Neuer Haken „Ein Speicher ist angeschlossen“: Eingänge, die nachts Strom liefern, werden automatisch als Speicher erkannt und aus den Warnungen genommen; „Eingang schwächer“ vergleicht nachts nicht mehr |
 | 1.1 | 21 | Version 1.1: Zusammenfassung aller Erweiterungen seit 1.0 (siehe oben) |

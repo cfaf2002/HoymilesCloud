@@ -142,7 +142,7 @@ class HoymilesCloud extends IPSModuleStrict
             return;
         }
         // Darstellungen (Symcon 8.0+) statt Variablenprofile; bestehende Variablen werden dabei umgestellt
-        $this->RegisterVariableBoolean('Producing', $this->Translate('Producing'), $this->presentBool('Standby', 'moon', 'Producing', 'sun', 0xF2A900), 0);
+        $this->RegisterVariableBoolean('Producing', $this->Translate('Producing'), $this->presentBool('Standby', 'moon', 'Producing', 'sun', 0xF2A900, 0x757575), 0);
         $this->RegisterVariableFloat('Power', $this->Translate('Power'), $this->presentValue(' W', 0, 'bolt'), 1);
         $this->RegisterVariableFloat('EnergyToday', $this->Translate('Yield today'), $this->presentValue(' kWh', 2, 'solar-panel'), 2);
         $this->RegisterVariableFloat('EnergyMonth', $this->Translate('Yield month'), $this->presentValue(' kWh', 1, 'solar-panel'), 3);
@@ -151,9 +151,9 @@ class HoymilesCloud extends IPSModuleStrict
         $this->RegisterVariableFloat('CO2', $this->Translate('CO₂ saved'), $this->presentValue(' kg', 1, 'leaf'), 6);
         $this->RegisterVariableInteger('DataTime', $this->Translate('Cloud data time'), $this->presentDateTime(), 7);
         $this->RegisterVariableInteger('LastUpdate', $this->Translate('Last query'), $this->presentDateTime(), 8);
-        $this->RegisterVariableBoolean('NightActive', $this->Translate('Night mode'), $this->presentBool('Day', 'sun', 'Night', 'moon'), 9);
+        $this->RegisterVariableBoolean('NightActive', $this->Translate('Night mode'), $this->presentBool('Day', 'sun', 'Night', 'moon', 0x3949AB, 0xF2A900), 9);
         $this->RegisterVariableBoolean('Alarm', $this->Translate('Fault'), $this->presentBool('none', 'circle-check', 'Fault', 'triangle-exclamation', 0xE53935, 0x2E9E44), 10);
-        $this->RegisterVariableString('AlarmText', $this->Translate('Fault message'), ['PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION, 'ICON' => 'triangle-exclamation', 'MULTILINE' => true], 11);
+        $this->RegisterVariableString('AlarmText', $this->Translate('Fault message'), ['PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION, 'ICON' => 'triangle-exclamation'], 11);
 
         $savings = $this->ReadPropertyBoolean('Savings');
         foreach (['SavingsToday' => ['Savings today', 12], 'SavingsMonth' => ['Savings month', 13], 'SavingsYear' => ['Savings year', 14], 'SavingsTotal' => ['Savings total', 15]] as $ident => [$name, $pos]) {
@@ -162,7 +162,7 @@ class HoymilesCloud extends IPSModuleStrict
 
         $this->RegisterVariableString('FirmwareDTU', $this->Translate('Firmware DTU'), ['PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION, 'ICON' => 'microchip'], 16);
         $this->RegisterVariableString('FirmwareInverter', $this->Translate('Firmware inverter'), ['PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION, 'ICON' => 'microchip'], 17);
-        $this->RegisterVariableBoolean('FirmwareUpdate', $this->Translate('Firmware update'), $this->presentBool('up to date', 'circle-check', 'update available', 'circle-info', 0x1E88E5), 18);
+        $this->RegisterVariableBoolean('FirmwareUpdate', $this->Translate('Firmware update'), $this->presentBool('up to date', 'circle-check', 'update available', 'circle-info', 0x1E88E5, 0x2E9E44), 18);
 
         $this->removeLegacyProfiles();
         $this->registerBrightnessSensor();
@@ -2223,16 +2223,15 @@ class HoymilesCloud extends IPSModuleStrict
         return ['PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION, 'SUFFIX' => $suffix, 'DIGITS' => $digits, 'ICON' => $icon];
     }
 
-    /** Wertanzeige für Ja/Nein mit Text, Icon und optional Farbe je Zustand. */
-    private function presentBool(string $off, string $iconOff, string $on, string $iconOn, int $colorOn = -1, int $colorOff = -1): array
+    /**
+     * Wertanzeige für Ja/Nein mit Text, Icon und Farbe je Zustand.
+     * Jede Option bekommt immer alle Schlüssel inkl. Farbe – fehlen sie, zeigt die
+     * Symcon-App „Invalid Configuration“ statt des Werts.
+     */
+    private function presentBool(string $off, string $iconOff, string $on, string $iconOn, int $colorOn, int $colorOff): array
     {
         $option = function (bool $value, string $caption, string $icon, int $color): array {
-            $o = ['Value' => $value, 'Caption' => $this->Translate($caption), 'IconActive' => true, 'IconValue' => $icon];
-            if ($color >= 0) {
-                $o['ColorActive'] = true;
-                $o['ColorValue'] = $color;
-            }
-            return $o;
+            return ['Value' => $value, 'Caption' => $this->Translate($caption), 'IconActive' => true, 'IconValue' => $icon, 'ColorActive' => true, 'ColorValue' => $color];
         };
         return [
             'PRESENTATION' => VARIABLE_PRESENTATION_VALUE_PRESENTATION,

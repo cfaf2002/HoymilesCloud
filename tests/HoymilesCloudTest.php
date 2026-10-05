@@ -386,6 +386,13 @@ class HoymilesCloudTest extends TestCaseSymconValidation
         $options = json_decode($alarm['OPTIONS'], true);
         $this->assertSame(['none', 'Fault'], array_column($options, 'Caption'), 'fault shows "none" / "fault", not OK/Alarm');
         $this->assertSame(0xE53935, $options[1]['ColorValue']);
+        // Jede Option muss alle Schlüssel haben, sonst zeigt die Symcon-App „Invalid Configuration“
+        foreach (['Producing', 'NightActive', 'Alarm', 'FirmwareUpdate'] as $ident) {
+            $p = IPS_GetVariable(IPS_GetObjectIDByIdent($ident, $id))['VariablePresentation'];
+            foreach (json_decode($p['OPTIONS'], true) as $o) {
+                $this->assertSame(['Value', 'Caption', 'IconActive', 'IconValue', 'ColorActive', 'ColorValue'], array_keys($o), $ident);
+            }
+        }
         $power = IPS_GetVariable(IPS_GetObjectIDByIdent('Power', $id))['VariablePresentation'];
         $this->assertSame(' W', $power['SUFFIX']);
         $time = IPS_GetVariable(IPS_GetObjectIDByIdent('LastUpdate', $id))['VariablePresentation'];
