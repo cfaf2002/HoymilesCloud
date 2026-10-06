@@ -189,7 +189,11 @@
             "Colours": "Farben",
             "Solar yellow (classic)": "Sonnengelb (klassisch)",
             "Symcon design (accent colour of the visualisation)": "Symcon-Design (Akzentfarbe der Visualisierung)",
-            "Text and background always follow the design chosen in the visualisation (light or dark). With \"Symcon design\", power, ring, daily curve and bars also take on its accent colour. Tapping a value in the tile opens the matching variable (from Symcon 8.2).": "Schrift und Hintergrund richten sich immer nach dem in der Visualisierung gewählten Design (hell oder dunkel). Mit „Symcon-Design“ übernehmen auch Leistung, Ring, Tagesverlauf und Balken dessen Akzentfarbe. Antippen eines Werts in der Kachel öffnet die passende Variable (ab Symcon 8.2)."
+            "Text and background always follow the design chosen in the visualisation (light or dark). With \"Symcon design\", power, ring, daily curve and bars also take on its accent colour. Tapping a value in the tile opens the matching variable (from Symcon 8.2).": "Schrift und Hintergrund richten sich immer nach dem in der Visualisierung gewählten Design (hell oder dunkel). Mit „Symcon-Design“ übernehmen auch Leistung, Ring, Tagesverlauf und Balken dessen Akzentfarbe. Antippen eines Werts in der Kachel öffnet die passende Variable (ab Symcon 8.2).",
+            "Tile color scheme": "Farbschema der Kachel",
+            "Symcon design – colors of the visualization": "Symcon-Design (Farben der Visualisierung)",
+            "Dark": "Dunkel",
+            "Light": "Hell"
         }
     }
 }

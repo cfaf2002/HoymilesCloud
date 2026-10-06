@@ -309,6 +309,25 @@
             "items": [
                 {
                     "type": "Select",
+                    "name": "TileTheme",
+                    "caption": "Tile color scheme",
+                    "options": [
+                        {
+                            "caption": "Symcon design – colors of the visualization",
+                            "value": 0
+                        },
+                        {
+                            "caption": "Dark",
+                            "value": 1
+                        },
+                        {
+                            "caption": "Light",
+                            "value": 2
+                        }
+                    ]
+                },
+                {
+                    "type": "Select",
                     "name": "TileColors",
                     "caption": "Colours",
                     "options": [

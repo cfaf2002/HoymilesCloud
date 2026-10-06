@@ -91,6 +91,7 @@ class HoymilesCloud extends IPSModuleStrict
         $this->RegisterPropertyInteger('SelfConsumption', 100);
 
         // Kachel
+        $this->RegisterPropertyInteger('TileTheme', 0);                  // 0 = Symcon-Design, 1 = Dunkel, 2 = Hell
         $this->RegisterPropertyInteger('TileMaxPower', 0); // 0 = aus dem Wechselrichter-Modell
         $this->RegisterPropertyString('TileColors', 'solar');            // solar = Sonnengelb | accent = Akzentfarbe des Symcon-Designs
         $this->RegisterPropertyString('TileBackground', 'illustration'); // illustration | picture | image | none
@@ -383,7 +384,7 @@ class HoymilesCloud extends IPSModuleStrict
     /** Inhalt der Kachel für die Kachel-Visualisierung. */
     public function GetVisualizationTile(): string
     {
-        return file_get_contents(__DIR__ . '/module.html')
+        return file_get_contents(__DIR__ . '/tile.html')
             . '<script>handleMessage(' . json_encode(json_encode(['background' => $this->tileBackground()])) . ');'
             . 'handleMessage(' . json_encode($this->tileMessage()) . ');</script>';
     }
@@ -1765,6 +1766,7 @@ class HoymilesCloud extends IPSModuleStrict
             'year'         => (float) $value('EnergyYear'),
             'total'        => (float) $value('EnergyTotal'),
             'savingsToday' => $this->ReadPropertyBoolean('Savings') ? (float) $value('SavingsToday') : null,
+            'theme'        => $this->ReadPropertyInteger('TileTheme'),
             'colors'       => $this->ReadPropertyString('TileColors') === 'accent' ? 'accent' : 'solar',
             'ids'          => [
                 'power' => (int) @$this->GetIDForIdent('Power'),

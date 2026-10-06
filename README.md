@@ -1,14 +1,17 @@
 # Hoymiles Cloud für IP-Symcon
 
-[![Version](https://img.shields.io/badge/Version-1.1%20%C2%B7%20Build%2024-2ea44f)](library.json)
-[![IP-Symcon](https://img.shields.io/badge/IP--Symcon-ab%208.1-1f6feb)](https://www.symcon.de)
-[![Symcon 9.0](https://img.shields.io/badge/optimiert%20f%C3%BCr-Symcon%209.0-0aa5a5)](https://www.symcon.de/de/service/dokumentation/installation/migrationen/v81-v90-q1-2026/)
-[![Kachel](https://img.shields.io/badge/Kachel--Visualisierung-HTML--SDK-f2a900)](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/html-sdk/)
-[![PHP](https://img.shields.io/badge/PHP-8.x%20(inkl.%208.5)-777bb4?logo=php&logoColor=white)](https://www.php.net)
-[![Hoymiles](https://img.shields.io/badge/Hoymiles-S--Miles%20Cloud-e2001a)](https://global.hoymiles.com)
-[![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-yellow)](LICENSE)
+[![IP-Symcon ab 8.1](https://img.shields.io/badge/IP--Symcon-ab_8.1-0b6fb3.svg)](https://www.symcon.de)
+[![Optimiert für Symcon 9.0](https://img.shields.io/badge/optimiert_f%C3%BCr-Symcon_9.0-0b6fb3.svg)](https://www.symcon.de/de/service/dokumentation/installation/migrationen/v81-v90-q1-2026/)
+[![Modul-Version 1.2 (Build 25)](https://img.shields.io/badge/Modul--Version-1.2_(Build_25)-informational.svg)](library.json)
 [![Tests](https://github.com/cfaf2002/HoymilesCloud/actions/workflows/tests.yml/badge.svg)](https://github.com/cfaf2002/HoymilesCloud/actions/workflows/tests.yml)
-[![Letzter Commit](https://img.shields.io/github/last-commit/cfaf2002/HoymilesCloud)](https://github.com/cfaf2002/HoymilesCloud/commits)
+[![PHP 8.3 und 8.5](https://img.shields.io/badge/PHP-8.3_%7C_8.5-777bb4.svg?logo=php&logoColor=white)](https://www.php.net)
+[![SDK: IPSModuleStrict](https://img.shields.io/badge/SDK-IPSModuleStrict-success.svg)](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/module/)
+[![Variablen: Darstellungen](https://img.shields.io/badge/Variablen-Darstellungen-success.svg)](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/darstellungen/)
+[![Kachel-Visualisierung: HTML-SDK](https://img.shields.io/badge/Kachel--Visualisierung-HTML--SDK-orange.svg)](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/html-sdk/)
+[![Farbschema: Symcon-Design, Dunkel, Hell](https://img.shields.io/badge/Farbschema-Symcon--Design_%7C_Dunkel_%7C_Hell-blueviolet.svg)](STYLEGUIDE.md)
+![Sprache: Deutsch | Englisch](https://img.shields.io/badge/Sprachen-Deutsch_%7C_Englisch-blueviolet.svg)
+[![Lizenz: MIT](https://img.shields.io/badge/Lizenz-MIT-green.svg)](LICENSE)
+[![Hoymiles](https://img.shields.io/badge/Hoymiles-S--Miles%20Cloud-e2001a)](https://global.hoymiles.com)
 
 Dieses Modul holt die Daten eines Hoymiles-Mikrowechselrichters (z. B. **HMS-1800-4T**) aus der **Hoymiles S-Miles Cloud** und stellt sie in IP-Symcon als Variablen bereit – Leistung, Erträge, die Werte jedes einzelnen Solarmoduls, Störungsmeldungen und die Ersparnis in Euro.
 
@@ -707,6 +710,7 @@ Version 1.1 fasst alle Erweiterungen seit 1.0 zusammen. Bestehende Einstellungen
 
 | Version | Build | Änderungen |
 |---------|-------|------------|
+| 1.2 | 25 | Einheitliches Design nach `STYLEGUIDE.md`: Kachel-Grundlage (Farben, Schrift, Radien, Zustandsfarben) und Einstellung „Farbschema der Kachel“ (Symcon-Design, Dunkel, Hell); Kachel-Datei heißt `tile.html`; einheitliche Badges; gemeinsamer Test-Workflow mit Struktur- und Ladetest; Farbschema zusätzlich zur Einstellung „Farben“ |
 | 1.1 | 24 | „Produziert“, „Nachtmodus“ und „Firmware-Update“ zeigten in der Symcon-App „Invalid Configuration“: jede Option der Darstellung hat jetzt immer eine Farbe; Störungsmeldung als einfache Textzeile |
 | 1.1 | 23 | Symcon-9.0-Technik: Basisklasse `IPSModuleStrict` (ab Symcon 8.1), Darstellungen statt Variablenprofile (alte `HOYM.*`-Profile werden aufgeräumt), kompatibel mit PHP 8.5; Kachel folgt dem Design der Visualisierung, neues Farbschema „Symcon-Design“, Antippen öffnet Variablen (`openObject`, ab 8.2); Sicherheit: Token-Schwärzung, HTTPS-only, Größenbegrenzung, robuster Tagesverlauf-Decoder, höchstens ein Abruf je 30 s über Kachel/Skript, Wartezeit nach falscher Anmeldung, keine gleichzeitigen Abrufe; Geschwindigkeit: eine Verbindung je Abruf, Komprimierung, überflüssige Sammelanfrage entfällt, Kachel-Animationen pausieren im Hintergrund; Badges und Lizenzangaben im README |
 | 1.1 | 22 | Neuer Haken „Ein Speicher ist angeschlossen“: Eingänge, die nachts Strom liefern, werden automatisch als Speicher erkannt und aus den Warnungen genommen; „Eingang schwächer“ vergleicht nachts nicht mehr |
