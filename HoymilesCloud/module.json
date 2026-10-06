@@ -3,7 +3,7 @@
     "name": "Hoymiles Cloud",
     "type": 3,
     "vendor": "Hoymiles",
-    "aliases": ["Hoymiles S-Miles Cloud", "Hoymiles Mikrowechselrichter"],
+    "aliases": [],
     "url": "https://github.com/Philra94/homeassistant-hoymiles-cloud",
     "parentRequirements": [],
     "childRequirements": [],

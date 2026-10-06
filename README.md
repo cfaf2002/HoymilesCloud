@@ -2,7 +2,7 @@
 
 [![IP-Symcon ab 8.1](https://img.shields.io/badge/IP--Symcon-ab_8.1-0b6fb3.svg)](https://www.symcon.de)
 [![Optimiert für Symcon 9.0](https://img.shields.io/badge/optimiert_f%C3%BCr-Symcon_9.0-0b6fb3.svg)](https://www.symcon.de/de/service/dokumentation/installation/migrationen/v81-v90-q1-2026/)
-[![Modul-Version 1.2 (Build 25)](https://img.shields.io/badge/Modul--Version-1.2_(Build_25)-informational.svg)](library.json)
+[![Modul-Version 1.2 (Build 26)](https://img.shields.io/badge/Modul--Version-1.2_(Build_26)-informational.svg)](library.json)
 [![Tests](https://github.com/cfaf2002/HoymilesCloud/actions/workflows/tests.yml/badge.svg)](https://github.com/cfaf2002/HoymilesCloud/actions/workflows/tests.yml)
 [![PHP 8.3 und 8.5](https://img.shields.io/badge/PHP-8.3_%7C_8.5-777bb4.svg?logo=php&logoColor=white)](https://www.php.net)
 [![SDK: IPSModuleStrict](https://img.shields.io/badge/SDK-IPSModuleStrict-success.svg)](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/module/)
@@ -710,6 +710,7 @@ Version 1.1 fasst alle Erweiterungen seit 1.0 zusammen. Bestehende Einstellungen
 
 | Version | Build | Änderungen |
 |---------|-------|------------|
+| 1.2 | 26 | Hausstil: Regel für die Modulliste (`vendor` gesetzt, höchstens ein Alias) in `STYLEGUIDE.md` und Strukturprüfung ergänzt; Modulliste: Hoymiles Cloud erscheint nur noch einmal statt zusätzlich unter „Hoymiles S-Miles Cloud“ und „Hoymiles Mikrowechselrichter“ |
 | 1.2 | 25 | Einheitliches Design nach `STYLEGUIDE.md`: Kachel-Grundlage (Farben, Schrift, Radien, Zustandsfarben) und Einstellung „Farbschema der Kachel“ (Symcon-Design, Dunkel, Hell); Kachel-Datei heißt `tile.html`; einheitliche Badges; gemeinsamer Test-Workflow mit Struktur- und Ladetest; Farbschema zusätzlich zur Einstellung „Farben“ |
 | 1.1 | 24 | „Produziert“, „Nachtmodus“ und „Firmware-Update“ zeigten in der Symcon-App „Invalid Configuration“: jede Option der Darstellung hat jetzt immer eine Farbe; Störungsmeldung als einfache Textzeile |
 | 1.1 | 23 | Symcon-9.0-Technik: Basisklasse `IPSModuleStrict` (ab Symcon 8.1), Darstellungen statt Variablenprofile (alte `HOYM.*`-Profile werden aufgeräumt), kompatibel mit PHP 8.5; Kachel folgt dem Design der Visualisierung, neues Farbschema „Symcon-Design“, Antippen öffnet Variablen (`openObject`, ab 8.2); Sicherheit: Token-Schwärzung, HTTPS-only, Größenbegrenzung, robuster Tagesverlauf-Decoder, höchstens ein Abruf je 30 s über Kachel/Skript, Wartezeit nach falscher Anmeldung, keine gleichzeitigen Abrufe; Geschwindigkeit: eine Verbindung je Abruf, Komprimierung, überflüssige Sammelanfrage entfällt, Kachel-Animationen pausieren im Hintergrund; Badges und Lizenzangaben im README |
