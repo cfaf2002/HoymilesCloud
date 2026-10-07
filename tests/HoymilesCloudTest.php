@@ -625,12 +625,13 @@ class HoymilesCloudTest extends TestCaseSymconValidation
         ob_start();
         imagejpeg($img, null, 95);
         $raw = (string) ob_get_clean();
-        $scaled = HoymilesCloud::scaleImage(base64_encode($raw), 'image/jpeg', 800);
+        $scale = new ReflectionMethod(HoymilesCloud::class, 'scaleImage'); // interner Helfer, kein Befehl
+        $scaled = $scale->invoke(null, base64_encode($raw), 'image/jpeg', 800);
         $this->assertNotNull($scaled);
         $this->assertSame([800, 533], $scaled['to']);
         $this->assertStringStartsWith('data:image/jpeg;base64,', $scaled['uri']);
         $this->assertLessThan(400 * 1024, strlen($scaled['uri']), 'fits well below the 1 MB tile limit');
-        $this->assertNull(HoymilesCloud::scaleImage(base64_encode('<svg/>'), 'image/svg+xml', 800));
+        $this->assertNull($scale->invoke(null, base64_encode('<svg/>'), 'image/svg+xml', 800));
     }
 
     public function testTileBackground(): void
@@ -694,6 +695,42 @@ class HoymilesCloudTest extends TestCaseSymconValidation
         $id = $this->instance(['BrightnessVariable' => $lux, 'BrightnessThreshold' => 75.0, 'BrightnessAuto' => false, 'AlarmModules' => false]);
         HOYM_Update($id);
         $this->assertEqualsWithDelta(75.0, $this->threshold($id), 0.01);
+    }
+
+    public function testBackfillPausesAfterFailedLogin(): void
+    {
+        $id = $this->instance();
+        HOYM_Update($id);
+        $this->silent(static function () use ($id): void {
+            HOYM_Backfill($id, 5);
+        });
+        IPS_SetProperty($id, 'Password', 'falsch!');
+        IPS_ApplyChanges($id);
+        @unlink(HOYMILES_FAKE_STATE . '/requests.log');
+        HOYM_BackfillStep($id);
+        $this->assertSame(201, IPS_GetInstance($id)['InstanceStatus']);
+        $logins = $this->countRequests('/auth/login');
+        $this->assertGreaterThan(0, $logins);
+        for ($i = 0; $i < 10; $i++) {
+            HOYM_BackfillStep($id);
+        }
+        $this->assertSame($logins, $this->countRequests('/auth/login'), 'no further logins while the login is rejected');
+        $job = json_decode($this->readAttribute($id, 'Backfill'), true);
+        $this->assertCount(5, $job['pending'], 'no day skipped because of the failed login');
+        $this->assertSame(15, $this->timerMinutes($id), 'regular query waits as well');
+    }
+
+    public function testBrightnessSensorRespectsLoginBackoff(): void
+    {
+        file_put_contents(HOYMILES_FAKE_STATE . '/offset', (string) (3 * 3600));
+        $lux = IPS_CreateVariable(VARIABLETYPE_FLOAT);
+        SetValue($lux, 5.0);
+        $id = $this->instance(['Password' => 'falsch!', 'BrightnessVariable' => $lux, 'BrightnessThreshold' => 50.0, 'BrightnessAuto' => false]);
+        HOYM_Update($id);
+        $this->assertSame(201, IPS_GetInstance($id)['InstanceStatus']);
+        $this->assertSame(15, $this->timerMinutes($id));
+        IPS\InstanceManager::getInstanceInterface($id)->MessageSink(time(), $lux, VM_UPDATE, [80.0, true, 5.0]);
+        $this->assertSame(15, $this->timerMinutes($id), 'sensor does not bypass the waiting time');
     }
 
     public function testWrongPasswordNeverUsesLegacyLogin(): void

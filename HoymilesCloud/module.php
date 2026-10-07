@@ -38,6 +38,8 @@ class HoymilesCloud extends IPSModuleStrict
     private const COMMAND_MAX_POLLS = 20;
     private const REFRESH_MIN_GAP = 30;          // Sekunden zwischen zwei Abrufen per Kachel/Skript
     private const AUTH_BACKOFF_MAX = 21600;      // nach falscher Anmeldung höchstens alle 6 Stunden erneut versuchen
+    private const BACKFILL_AUTH_WAIT_MS = 60000; // Nachladen pausiert, solange die Anmeldung abgelehnt wird
+    private const LOCK_WAIT_MS = 10000;          // Knöpfe/Befehle warten höchstens so lange auf einen laufenden Abruf
 
     // Steuerbefehle (Codes aus der S-Miles-Weboberfläche): Name => [Aktion, Gerätetyp]
     private const COMMANDS = [
@@ -186,15 +188,12 @@ class HoymilesCloud extends IPSModuleStrict
         $this->resetAlarmsOnConfigChange();
         $this->updateSummary();
 
-        if (!$this->ReadPropertyBoolean('Active')) {
-            $this->SetTimerInterval('UpdateTimer', 0);
-            $this->SetTimerInterval('BackfillTimer', 0);
-            $this->SetStatus(self::STATUS_INACTIVE);
-            return;
-        }
-        if (!$this->hasCredentials()) {
-            $this->SetTimerInterval('UpdateTimer', 0);
-            $this->SetStatus(self::STATUS_NO_CREDENTIALS);
+        if (!$this->ReadPropertyBoolean('Active') || !$this->hasCredentials()) {
+            // alle Timer anhalten; laufendes Nachladen und Befehle werden beim nächsten Übernehmen fortgesetzt
+            foreach (['UpdateTimer', 'BackfillTimer', 'CommandTimer'] as $timer) {
+                $this->SetTimerInterval($timer, 0);
+            }
+            $this->SetStatus($this->ReadPropertyBoolean('Active') ? self::STATUS_NO_CREDENTIALS : self::STATUS_INACTIVE);
             return;
         }
         $this->WriteAttributeInteger('AuthFailures', 0);
@@ -221,6 +220,9 @@ class HoymilesCloud extends IPSModuleStrict
         if ($Message === VM_UPDATE && $SenderID === $this->ReadAttributeInteger('BrightnessRegistered')) {
             if (!$this->ReadPropertyBoolean('Active') || !$this->ReadPropertyBoolean('NightMode') || !$this->hasCredentials()) {
                 return;
+            }
+            if ($this->GetStatus() === self::STATUS_AUTH_ERROR) {
+                return; // Anmeldung abgelehnt: Wartezeit (authBackoff) nicht durch den Sensor umgehen
             }
             $brightness = (float) $Data[0];
             if ($brightness >= $this->brightnessThreshold() && $this->GetValue('NightActive')) {
@@ -316,15 +318,14 @@ class HoymilesCloud extends IPSModuleStrict
         }
 
         // Nicht zweimal gleichzeitig abfragen (Timer und Kachel), sonst überschreiben sich Token und Zwischenstände
-        $lock = 'HOYM_Update_' . $this->InstanceID;
-        if (!IPS_SemaphoreEnter($lock, 0)) {
+        if (!$this->lock(0)) {
             $this->SendDebug('Update', 'another query is still running – skipped', 0);
             return;
         }
         try {
             $this->runUpdate();
         } finally {
-            IPS_SemaphoreLeave($lock);
+            $this->unlock();
         }
     }
 
@@ -392,6 +393,19 @@ class HoymilesCloud extends IPSModuleStrict
     /** Button „Verbindung testen“: frischer Login und Liste der Anlagen. */
     public function TestConnection(): void
     {
+        if (!$this->lock(self::LOCK_WAIT_MS)) {
+            echo $this->Translate('A query is still running. Please try again in a moment.');
+            return;
+        }
+        try {
+            $this->testConnectionLocked();
+        } finally {
+            $this->unlock();
+        }
+    }
+
+    private function testConnectionLocked(): void
+    {
         $client = $this->client(true);
         try {
             $client->login();
@@ -422,6 +436,19 @@ class HoymilesCloud extends IPSModuleStrict
 
     /** Button „Anlage neu einlesen“: Anlage, Wechselrichter und PV-Eingänge ermitteln. */
     public function Discover(): void
+    {
+        if (!$this->lock(self::LOCK_WAIT_MS)) {
+            echo $this->Translate('A query is still running. Please try again in a moment.');
+            return;
+        }
+        try {
+            $this->discoverLocked();
+        } finally {
+            $this->unlock();
+        }
+    }
+
+    private function discoverLocked(): void
     {
         $client = $this->client();
         try {
@@ -497,24 +524,43 @@ class HoymilesCloud extends IPSModuleStrict
             $this->SetTimerInterval('BackfillTimer', 0);
             return;
         }
+        if ($job['pending'] && $this->GetStatus() === self::STATUS_AUTH_ERROR) {
+            // Anmeldung abgelehnt: nicht im Sekundentakt weiter probieren (Kontosperre). Es geht weiter,
+            // sobald ein regulärer Abruf (mit Wartezeit) oder „Verbindung testen“ wieder klappt.
+            $this->SetTimerInterval('BackfillTimer', self::BACKFILL_AUTH_WAIT_MS);
+            return;
+        }
         $this->SetTimerInterval('BackfillTimer', self::BACKFILL_TICK_MS);
 
         if ($job['pending']) {
-            $date = $job['pending'][0];
-            $client = $this->client();
+            // Token nicht gleichzeitig mit dem Abruf erneuern; läuft einer, im nächsten Takt weiter
+            if (!$this->lock(0)) {
+                return;
+            }
             try {
-                $job['energy'][$date] = $this->backfillDay($client, $date);
-                array_shift($job['pending']);
-                $job['retries'] = 0;
-            } catch (Throwable $e) {
-                $this->SendDebug('Backfill', "$date: " . $e->getMessage(), 0);
-                if (++$job['retries'] >= 3) {
-                    $job['skipped'][] = $date;
+                $date = $job['pending'][0];
+                $client = $this->client();
+                try {
+                    $job['energy'][$date] = $this->backfillDay($client, $date);
                     array_shift($job['pending']);
                     $job['retries'] = 0;
+                } catch (HoymilesAuthException $e) {
+                    // kein Fehlversuch für den Tag: pausieren, bis die Anmeldung wieder klappt
+                    $this->fail(self::STATUS_AUTH_ERROR, $e);
+                    $this->authBackoff();
+                    $this->SetTimerInterval('BackfillTimer', self::BACKFILL_AUTH_WAIT_MS);
+                } catch (Throwable $e) {
+                    $this->SendDebug('Backfill', "$date: " . $e->getMessage(), 0);
+                    if (++$job['retries'] >= 3) {
+                        $job['skipped'][] = $date;
+                        array_shift($job['pending']);
+                        $job['retries'] = 0;
+                    }
                 }
+                $this->saveClientState($client);
+            } finally {
+                $this->unlock();
             }
-            $this->saveClientState($client);
             $this->WriteAttributeString('Backfill', json_encode($job));
             $this->updateBackfillForm();
             return;
@@ -560,6 +606,10 @@ class HoymilesCloud extends IPSModuleStrict
             return;
         }
 
+        if (!$this->lock(self::LOCK_WAIT_MS)) {
+            echo $this->Translate('A query is still running. Please try again in a moment.');
+            return;
+        }
         $client = $this->client();
         try {
             $dtuSn = $this->dtuFor($client, $sn);
@@ -575,6 +625,7 @@ class HoymilesCloud extends IPSModuleStrict
             echo $this->Translate('Error') . ': ' . $e->getMessage();
         } finally {
             $this->saveClientState($client);
+            $this->unlock();
         }
     }
 
@@ -586,6 +637,10 @@ class HoymilesCloud extends IPSModuleStrict
             $this->SetTimerInterval('CommandTimer', 0);
             return;
         }
+        // läuft gerade ein Abruf, im nächsten Takt nachfragen (Token nicht doppelt erneuern)
+        if (!$this->lock(0)) {
+            return;
+        }
         $client = $this->client();
         $code = 2;
         $error = '';
@@ -593,8 +648,10 @@ class HoymilesCloud extends IPSModuleStrict
             $code = $client->commandStatus((string) $job['task']);
         } catch (Throwable $e) {
             $error = $e->getMessage();
+        } finally {
+            $this->saveClientState($client);
+            $this->unlock();
         }
-        $this->saveClientState($client);
         $job['polls']++;
         $name = $this->commandName($job['command']);
 
@@ -1574,7 +1631,7 @@ class HoymilesCloud extends IPSModuleStrict
      * Verkleinert ein Bild (Base64) auf höchstens $maxSize px Kantenlänge.
      * @return array{uri:string,from:array,to:array}|null null, wenn nicht nötig oder nicht möglich
      */
-    public static function scaleImage(string $base64, string $mime, int $maxSize): ?array
+    private static function scaleImage(string $base64, string $mime, int $maxSize): ?array
     {
         $raw = base64_decode($base64, true);
         if ($mime === 'image/svg+xml' || $raw === false || !function_exists('imagecreatefromstring')) {
@@ -2090,6 +2147,20 @@ class HoymilesCloud extends IPSModuleStrict
             }
         }
         return $map;
+    }
+
+    /**
+     * Sperre für alles, was mit der Cloud spricht: Abruf, Nachladen, Befehle und Knöpfe teilen sich
+     * Token und Zwischenstände. Ohne Sperre würde ein zweiter Thread den frisch erneuerten Token verwerfen.
+     */
+    private function lock(int $waitMs): bool
+    {
+        return IPS_SemaphoreEnter('HOYM_Update_' . $this->InstanceID, $waitMs);
+    }
+
+    private function unlock(): void
+    {
+        IPS_SemaphoreLeave('HOYM_Update_' . $this->InstanceID);
     }
 
     private function channels(): array

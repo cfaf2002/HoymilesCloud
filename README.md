@@ -2,7 +2,7 @@
 
 [![IP-Symcon ab 8.1](https://img.shields.io/badge/IP--Symcon-ab_8.1-0b6fb3.svg)](https://www.symcon.de)
 [![Optimiert für Symcon 9.0](https://img.shields.io/badge/optimiert_f%C3%BCr-Symcon_9.0-0b6fb3.svg)](https://www.symcon.de/de/service/dokumentation/installation/migrationen/v81-v90-q1-2026/)
-[![Modul-Version 1.2 (Build 26)](https://img.shields.io/badge/Modul--Version-1.2_(Build_26)-informational.svg)](library.json)
+[![Modul-Version 1.3 (Build 27)](https://img.shields.io/badge/Modul--Version-1.3_(Build_27)-informational.svg)](library.json)
 [![Tests](https://github.com/cfaf2002/HoymilesCloud/actions/workflows/tests.yml/badge.svg)](https://github.com/cfaf2002/HoymilesCloud/actions/workflows/tests.yml)
 [![PHP 8.3 und 8.5](https://img.shields.io/badge/PHP-8.3_%7C_8.5-777bb4.svg?logo=php&logoColor=white)](https://www.php.net)
 [![SDK: IPSModuleStrict](https://img.shields.io/badge/SDK-IPSModuleStrict-success.svg)](https://www.symcon.de/de/service/dokumentation/entwicklerbereich/sdk-tools/sdk-php/module/)
@@ -17,7 +17,7 @@ Dieses Modul holt die Daten eines Hoymiles-Mikrowechselrichters (z. B. **HMS-180
 
 Das Modul braucht keinen direkten Zugriff auf den Wechselrichter oder die DTU im Heimnetz. Es nutzt dieselben Zugangsdaten wie die S-Miles-App auf dem Handy. Das ist besonders dann praktisch, wenn eine lokale Anbindung (z. B. über OpenDTU) nicht oder nicht mehr funktioniert.
 
-Version 1.1 · IP-Symcon 8.1 bis 9.0 (optimiert für 9.0) · Oberfläche Deutsch und Englisch · Lizenz MIT
+Version 1.3 · IP-Symcon 8.1 bis 9.0 (optimiert für 9.0) · Oberfläche Deutsch und Englisch · Lizenz MIT
 
 ---
 
@@ -501,6 +501,7 @@ Frisch eingerichtet beginnen die Diagramme in Symcon erst mit dem heutigen Tag. 
 - **Tage, die schon Werte im Archiv haben, werden übersprungen** – es wird nichts doppelt eingetragen. Das Nachladen kann also gefahrlos mehrmals gestartet werden.
 - Die Zählerstände werden aus den Tagesverläufen **berechnet**: Ausgehend vom heutigen Zählerstand der Cloud werden die Tageserträge rückwärts abgezogen. Weil die Verläufe die Leistung der Solarmodule (vor dem Wechselrichter) zeigen, rechnet das Modul sie mit dem Wirkungsgrad des Wechselrichters um. Die nachgeladenen Tageserträge können deshalb um wenige Prozent von der App abweichen.
 - Die Gesamtleistung („Leistung“) wird nicht nachgeladen, nur die Leistung je Eingang.
+- Lehnt die Cloud die Anmeldung ab (z. B. Passwort geändert), **pausiert** das Nachladen, statt es weiter zu probieren. Es geht von selbst weiter, sobald die Anmeldung wieder klappt (nach „Verbindung testen“ bzw. dem nächsten regulären Abruf).
 - Voraussetzung: **Archivieren** ist eingeschaltet.
 
 ## 14. Archivierung
@@ -555,6 +556,8 @@ HOYM_BackfillCancel(12345);
 // Wechselrichter / DTU steuern (siehe Abschnitt 11)
 HOYM_SendCommand(12345, 'reboot', '');
 ```
+
+`HOYM_BackfillStep` und `HOYM_CommandStep` sind nur für die internen Timer des Moduls da (je ein Schritt des Nachladens bzw. Abfrage des Befehlsergebnisses) und nicht für eigene Skripte gedacht.
 
 Beispiel: Den schwächsten Eingang des Tages ermitteln:
 
@@ -710,6 +713,7 @@ Version 1.1 fasst alle Erweiterungen seit 1.0 zusammen. Bestehende Einstellungen
 
 | Version | Build | Änderungen |
 |---------|-------|------------|
+| 1.3 | 27 | Anmeldung: Verlauf nachladen pausiert bei abgelehnter Anmeldung, statt im Sekundentakt neu anzumelden (Kontosperre); der Helligkeitssensor umgeht die Wartezeit nach falschem Passwort nicht mehr; Abruf, Nachladen, Befehle und Knöpfe teilen sich eine Sperre, damit ein erneuerter Token nicht verworfen wird; ohne Zugangsdaten bzw. ausgeschaltet stoppen alle Timer; Kachel: Aktualisieren-Knopf 36 px, fehlerhafte Nachrichten werden ignoriert; interner Bild-Helfer nicht mehr als Befehl sichtbar |
 | 1.2 | 26 | Hausstil: Regel für die Modulliste (`vendor` gesetzt, höchstens ein Alias) in `STYLEGUIDE.md` und Strukturprüfung ergänzt; Modulliste: Hoymiles Cloud erscheint nur noch einmal statt zusätzlich unter „Hoymiles S-Miles Cloud“ und „Hoymiles Mikrowechselrichter“ |
 | 1.2 | 25 | Einheitliches Design nach `STYLEGUIDE.md`: Kachel-Grundlage (Farben, Schrift, Radien, Zustandsfarben) und Einstellung „Farbschema der Kachel“ (Symcon-Design, Dunkel, Hell); Kachel-Datei heißt `tile.html`; einheitliche Badges; gemeinsamer Test-Workflow mit Struktur- und Ladetest; Farbschema zusätzlich zur Einstellung „Farben“ |
 | 1.1 | 24 | „Produziert“, „Nachtmodus“ und „Firmware-Update“ zeigten in der Symcon-App „Invalid Configuration“: jede Option der Darstellung hat jetzt immer eine Farbe; Störungsmeldung als einfache Textzeile |

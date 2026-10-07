@@ -63,7 +63,7 @@
         --track: var(--surface-hover);
     }
     /* Farbschema „Symcon-Design“: Leistung, Ring, Kurve und Balken in der Akzentfarbe des Designs */
-    #hm[data-colors="accent"] { --solar: var(--accent-color, #f2a900); }
+    #hm[data-colors="accent"] { --solar: var(--accent-color, var(--brand)); }
     .link { cursor: pointer; }
     .link:hover { text-decoration: underline; text-decoration-color: var(--faint); text-underline-offset: 3px; }
     .in.link:hover { text-decoration: none; }
@@ -152,7 +152,7 @@
     #hm[data-status="standby"] #bgPic { filter: saturate(0.6); }
 
     /* Kopfzeile */
-    .head { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 30px; }
+    .head { display: flex; align-items: center; justify-content: flex-end; gap: 8px; min-height: 36px; }
     .title { flex: 1; min-width: 0; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .pill {
         display: inline-flex; align-items: center; gap: 5px;
@@ -166,7 +166,7 @@
     .pill.fault svg { color: var(--critical); }
     .refresh {
         border: 0; background: var(--track); color: var(--muted); cursor: pointer;
-        width: 30px; height: 30px; flex: none; display: inline-flex; align-items: center; justify-content: center;
+        width: 36px; height: 36px; flex: none; display: inline-flex; align-items: center; justify-content: center;
         border-radius: 50%; position: relative; z-index: 2; -webkit-tap-highlight-color: transparent;
     }
     .refresh:hover, .refresh:active { color: currentColor; background: color-mix(in srgb, currentColor 20%, transparent); }
@@ -466,7 +466,11 @@
     }
 
     function handleMessage(data) {
-        const s = typeof data === 'string' ? JSON.parse(data) : data;
+        let s = data;
+        if (typeof data === 'string') {
+            try { s = JSON.parse(data); } catch (e) { return; } // unvollständige Nachricht: letzten Stand behalten
+        }
+        if (!s || typeof s !== 'object') { return; }
         if (s.background) {
             hmApplyBackground(s.background);
         }

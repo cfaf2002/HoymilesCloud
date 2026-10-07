@@ -134,6 +134,7 @@
             "Unknown command.": "Unbekannter Befehl.",
             "Unknown inverter.": "Unbekannter Wechselrichter.",
             "Another command is still running. Please wait a moment.": "Es läuft noch ein anderer Befehl. Bitte einen Moment warten.",
+            "A query is still running. Please try again in a moment.": "Es läuft gerade ein Abruf. Bitte gleich noch einmal versuchen.",
             "\"%s\" sent – waiting for confirmation from the DTU …": "„%s“ gesendet – warte auf Bestätigung der DTU …",
             "\"%s\" has been sent. The DTU confirms it within about 30 seconds; the result is shown in the form and in the message log.": "„%s“ wurde gesendet. Die DTU bestätigt den Befehl innerhalb von etwa 30 Sekunden; das Ergebnis steht im Formular und im Meldungsfenster.",
             "\"%s\" was carried out successfully.": "„%s“ wurde erfolgreich ausgeführt.",
